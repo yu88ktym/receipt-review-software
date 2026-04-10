@@ -1,0 +1,168 @@
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QLabel,
+    QSpinBox, QSlider, QLineEdit, QCheckBox, QGroupBox, QColorDialog,
+    QFrame,
+)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
+from app.config import theme
+
+
+class TabSettings(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._accent_color = QColor(theme.COLOR_ACCENT)
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
+        root.setSpacing(theme.MARGIN)
+
+        cols = QHBoxLayout()
+        cols.setSpacing(theme.PADDING)
+        cols.addWidget(self._build_ui_settings(), stretch=1)
+        cols.addWidget(self._build_network_settings(), stretch=1)
+        root.addLayout(cols)
+
+        root.addWidget(_divider())
+
+        root.addWidget(self._build_border_settings())
+        root.addWidget(_divider())
+        root.addWidget(self._build_column_width_settings())
+
+        root.addStretch()
+
+        save_btn = QPushButton("保存")
+        root.addWidget(save_btn)
+
+    def _build_ui_settings(self) -> QGroupBox:
+        group = QGroupBox("UI設定")
+        layout = QGridLayout(group)
+        layout.setSpacing(theme.MARGIN)
+        row = 0
+
+        layout.addWidget(QLabel("一覧の初期ページサイズ"), row, 0)
+        self.page_size_spin = QSpinBox()
+        self.page_size_spin.setRange(1, 500)
+        self.page_size_spin.setValue(50)
+        layout.addWidget(self.page_size_spin, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("右サイドバー幅 (%)"), row, 0)
+        slider_row = QHBoxLayout()
+        self.sidebar_width_slider = QSlider(Qt.Orientation.Horizontal)
+        self.sidebar_width_slider.setRange(10, 50)
+        self.sidebar_width_slider.setValue(theme.DETAIL_PANEL_WIDTH_PERCENT)
+        self.sidebar_width_lbl = QLabel(f"{theme.DETAIL_PANEL_WIDTH_PERCENT}%")
+        self.sidebar_width_lbl.setFixedWidth(36)
+        self.sidebar_width_slider.valueChanged.connect(
+            lambda v: self.sidebar_width_lbl.setText(f"{v}%")
+        )
+        slider_row.addWidget(self.sidebar_width_slider)
+        slider_row.addWidget(self.sidebar_width_lbl)
+        slider_widget = QWidget()
+        slider_widget.setLayout(slider_row)
+        layout.addWidget(slider_widget, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("日付フォーマット"), row, 0)
+        self.date_format_edit = QLineEdit("yyyy-MM-dd")
+        layout.addWidget(self.date_format_edit, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("金額フォーマット"), row, 0)
+        self.amount_format_edit = QLineEdit("¥{:,.0f}")
+        layout.addWidget(self.amount_format_edit, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("重要チップ色"), row, 0)
+        self.accent_color_btn = QPushButton()
+        self._update_accent_btn()
+        self.accent_color_btn.clicked.connect(self._pick_accent_color)
+        layout.addWidget(self.accent_color_btn, row, 1)
+        row += 1
+
+        self.thumbnail_chk = QCheckBox("サムネイル表示")
+        self.thumbnail_chk.setChecked(True)
+        layout.addWidget(self.thumbnail_chk, row, 0, 1, 2)
+
+        return group
+
+    def _build_network_settings(self) -> QGroupBox:
+        group = QGroupBox("通信設定")
+        layout = QGridLayout(group)
+        layout.setSpacing(theme.MARGIN)
+        row = 0
+
+        layout.addWidget(QLabel("差分ページサイズ"), row, 0)
+        self.diff_page_size_spin = QSpinBox()
+        self.diff_page_size_spin.setRange(1, 500)
+        self.diff_page_size_spin.setValue(20)
+        layout.addWidget(self.diff_page_size_spin, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("自動更新間隔 (秒)"), row, 0)
+        self.auto_interval_spin = QSpinBox()
+        self.auto_interval_spin.setRange(0, 3600)
+        self.auto_interval_spin.setValue(0)
+        self.auto_interval_spin.setSpecialValueText("無効")
+        layout.addWidget(self.auto_interval_spin, row, 1)
+
+        layout.setRowStretch(layout.rowCount(), 1)
+        return group
+
+    def _build_border_settings(self) -> QGroupBox:
+        group = QGroupBox("罫線設定")
+        layout = QGridLayout(group)
+        layout.setSpacing(theme.MARGIN)
+
+        layout.addWidget(QLabel("グリッド表示"), 0, 0)
+        self.grid_chk = QCheckBox()
+        self.grid_chk.setChecked(True)
+        layout.addWidget(self.grid_chk, 0, 1)
+
+        return group
+
+    def _build_column_width_settings(self) -> QGroupBox:
+        group = QGroupBox("カラム幅設定")
+        layout = QGridLayout(group)
+        layout.setSpacing(theme.MARGIN)
+
+        col_defs = [
+            ("レシートID", 100),
+            ("アップロード日", 110),
+            ("購入日", 100),
+            ("合計金額", 90),
+            ("店名", 150),
+            ("支払方法", 100),
+        ]
+        self.col_width_spins: dict[str, QSpinBox] = {}
+        for i, (name, default) in enumerate(col_defs):
+            layout.addWidget(QLabel(name), i, 0)
+            spin = QSpinBox()
+            spin.setRange(50, 400)
+            spin.setValue(default)
+            layout.addWidget(spin, i, 1)
+            self.col_width_spins[name] = spin
+
+        return group
+
+    def _pick_accent_color(self) -> None:
+        color = QColorDialog.getColor(self._accent_color, self, "チップ色を選択")
+        if color.isValid():
+            self._accent_color = color
+            self._update_accent_btn()
+
+    def _update_accent_btn(self) -> None:
+        self.accent_color_btn.setText(self._accent_color.name())
+        self.accent_color_btn.setStyleSheet(
+            f"background-color: {self._accent_color.name()}; color: #FFFFFF;"
+        )
+
+
+def _divider() -> QFrame:
+    line = QFrame()
+    line.setFrameShape(QFrame.Shape.HLine)
+    line.setFrameShadow(QFrame.Shadow.Sunken)
+    return line
