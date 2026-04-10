@@ -8,6 +8,14 @@ from app.config import theme
 _STORE_HEADERS = ["表記ゆれ", "正規化後", "削除"]
 _PAYMENT_HEADERS = ["表記ゆれ", "正規化後", "削除"]
 
+
+def _remove_row_by_widget(table: QTableWidget, widget: QPushButton, col: int) -> None:
+    """ボタン参照から現在の行インデックスを動的に解決して削除する。"""
+    for row in range(table.rowCount()):
+        if table.cellWidget(row, col) is widget:
+            table.removeRow(row)
+            return
+
 _DUMMY_STORE_MAP = [
     ("コンビニA店", "コンビニA"),
     ("コンビニＡ", "コンビニA"),
@@ -48,6 +56,7 @@ class TabAutocomplete(QWidget):
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setAlternatingRowColors(True)
 
+        del_col = len(headers) - 1
         for row_data in rows:
             row = table.rowCount()
             table.insertRow(row)
@@ -57,8 +66,10 @@ class TabAutocomplete(QWidget):
                 table.setItem(row, col, item)
             del_btn = QPushButton("削除")
             del_btn.setProperty("danger", "true")
-            del_btn.clicked.connect(lambda checked, r=row, t=table: t.removeRow(r))
-            table.setCellWidget(row, len(headers) - 1, del_btn)
+            del_btn.clicked.connect(
+                lambda checked, b=del_btn, t=table, c=del_col: _remove_row_by_widget(t, b, c)
+            )
+            table.setCellWidget(row, del_col, del_btn)
 
         layout.addWidget(table)
 
@@ -81,7 +92,9 @@ class TabAutocomplete(QWidget):
                 t.setItem(r, c, item)
             btn = QPushButton("削除")
             btn.setProperty("danger", "true")
-            btn.clicked.connect(lambda checked, row=r: t.removeRow(row))
+            btn.clicked.connect(
+                lambda checked, b=btn, tbl=t, c=len(headers) - 1: _remove_row_by_widget(tbl, b, c)
+            )
             t.setCellWidget(r, len(headers) - 1, btn)
             v.clear()
             n.clear()
