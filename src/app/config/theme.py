@@ -15,7 +15,7 @@ MARGIN = 8
 PADDING = 12
 
 SIDEBAR_WIDTH = 250
-DETAIL_PANEL_WIDTH_PERCENT = 23
+DETAIL_PANEL_WIDTH_PERCENT = 28
 
 
 def apply_application_font(app: QApplication) -> None:

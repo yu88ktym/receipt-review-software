@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Receipt Review Software")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1800, 1000)
         self._build_ui()
 
     def _build_ui(self) -> None:
