@@ -5,8 +5,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate
 from app.config import theme
+from app.config.status_colors import get_row_color
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "操作"]
+
+# ステータス値が格納される列インデックス
+_STATUS_COL = 6
 
 _DUMMY_ROWS = [
     ("R-0001", "2024-01-15", "2024-01-14", "3200", "コンビニA", "現金", "FINAL_UPDATED"),
@@ -37,7 +41,9 @@ class TabFinalEdit(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setAlternatingRowColors(True)
+        self.table.setAlternatingRowColors(False)
+        self.table.setSortingEnabled(True)
+        self.table.horizontalHeader().setSortIndicatorShown(True)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
         root.addWidget(self.table)
 
@@ -88,6 +94,7 @@ class TabFinalEdit(QWidget):
         root.addWidget(form_group)
 
     def _populate(self) -> None:
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         for row_data in _DUMMY_ROWS:
             row = self.table.rowCount()
@@ -99,6 +106,19 @@ class TabFinalEdit(QWidget):
             btn = QPushButton("選択")
             btn.clicked.connect(lambda checked, r=row: self.table.selectRow(r))
             self.table.setCellWidget(row, len(_HEADERS) - 1, btn)
+        self._apply_row_colors()
+        self.table.setSortingEnabled(True)
+
+    def _apply_row_colors(self) -> None:
+        """ステータス列の値に応じて行全体の背景色を設定する。"""
+        for row in range(self.table.rowCount()):
+            status_item = self.table.item(row, _STATUS_COL)
+            status = status_item.text() if status_item else ""
+            color = get_row_color(status)
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item is not None:
+                    item.setBackground(color)
 
     def _on_selection_changed(self) -> None:
         selected = self.table.selectedItems()

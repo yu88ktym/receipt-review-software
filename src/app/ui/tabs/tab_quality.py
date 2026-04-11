@@ -5,8 +5,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
+from app.config.status_colors import get_row_color
 
 _HEADERS = ["画像ID", "サムネイル", "ステータス", "品質", "重複", "ゴミ箱", "操作"]
+
+# ステータス値が格納される列インデックス
+_STATUS_COL = 2
 
 _DUMMY_ROWS = [
     ("IMG-001", "—", "REVIEWED", "HIGH", "なし", "—"),
@@ -46,7 +50,9 @@ class TabQuality(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setAlternatingRowColors(True)
+        self.table.setAlternatingRowColors(False)
+        self.table.setSortingEnabled(True)
+        self.table.horizontalHeader().setSortIndicatorShown(True)
         root.addWidget(self.table)
 
         # 品質確認パネル（展開式）
@@ -66,6 +72,7 @@ class TabQuality(QWidget):
         root.addWidget(self.qa_group)
 
     def _populate(self) -> None:
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         for row_data in _DUMMY_ROWS:
             row = self.table.rowCount()
@@ -89,6 +96,19 @@ class TabQuality(QWidget):
             ops_layout.addWidget(detail_btn)
             ops_layout.addWidget(qa_btn)
             self.table.setCellWidget(row, len(_HEADERS) - 1, ops_widget)
+        self._apply_row_colors()
+        self.table.setSortingEnabled(True)
+
+    def _apply_row_colors(self) -> None:
+        """ステータス列の値に応じて行全体の背景色を設定する。"""
+        for row in range(self.table.rowCount()):
+            status_item = self.table.item(row, _STATUS_COL)
+            status = status_item.text() if status_item else ""
+            color = get_row_color(status)
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item is not None:
+                    item.setBackground(color)
 
     def _on_detail(self, row_data: tuple) -> None:
         keys = ["receipt_id", "status", "quality_level"]

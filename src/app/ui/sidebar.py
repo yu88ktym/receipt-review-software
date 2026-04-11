@@ -66,11 +66,6 @@ class Sidebar(QWidget):
         self.page_size_spin.setValue(50)
         root.addWidget(self.page_size_spin)
 
-        root.addWidget(QLabel("並び順"))
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems(["upload_date DESC", "upload_date ASC", "purchase_date DESC", "purchase_date ASC"])
-        root.addWidget(self.sort_combo)
-
         root.addStretch()
 
 

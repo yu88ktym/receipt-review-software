@@ -1,21 +1,32 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QLabel,
     QSpinBox, QSlider, QLineEdit, QCheckBox, QGroupBox, QColorDialog,
-    QFrame,
+    QFrame, QScrollArea,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from app.config import theme
+from app.config import status_colors
 
 
 class TabSettings(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._accent_color = QColor(theme.COLOR_ACCENT)
+        self._status_colors: dict[str, QColor] = {
+            k: QColor(v) for k, v in status_colors.STATUS_COLORS.items()
+        }
+        self._status_color_btns: dict[str, QPushButton] = {}
         self._build_ui()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        # スクロール可能にして設定項目が増えても見切れないようにする
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        container = QWidget()
+        root = QVBoxLayout(container)
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
 
@@ -30,11 +41,18 @@ class TabSettings(QWidget):
         root.addWidget(self._build_border_settings())
         root.addWidget(_divider())
         root.addWidget(self._build_column_width_settings())
+        root.addWidget(_divider())
+        root.addWidget(self._build_status_color_settings())
 
         root.addStretch()
 
         save_btn = QPushButton("保存")
         root.addWidget(save_btn)
+
+        scroll.setWidget(container)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
 
     def _build_ui_settings(self) -> QGroupBox:
         group = QGroupBox("UI設定")
@@ -49,7 +67,7 @@ class TabSettings(QWidget):
         layout.addWidget(self.page_size_spin, row, 1)
         row += 1
 
-        layout.addWidget(QLabel("右サイドバー幅 (%)"), row, 0)
+        layout.addWidget(QLabel("詳細サイドバー幅 (%)"), row, 0)
         slider_row = QHBoxLayout()
         self.sidebar_width_slider = QSlider(Qt.Orientation.Horizontal)
         self.sidebar_width_slider.setRange(10, 50)
@@ -147,6 +165,37 @@ class TabSettings(QWidget):
             self.col_width_spins[name] = spin
 
         return group
+
+    def _build_status_color_settings(self) -> QGroupBox:
+        group = QGroupBox("画像ステータス色設定")
+        layout = QGridLayout(group)
+        layout.setSpacing(theme.MARGIN)
+
+        for i, status in enumerate(status_colors.STATUS_COLORS):
+            layout.addWidget(QLabel(status), i, 0)
+            btn = QPushButton()
+            self._status_color_btns[status] = btn
+            self._update_status_color_btn(status)
+            btn.clicked.connect(lambda checked, s=status: self._pick_status_color(s))
+            layout.addWidget(btn, i, 1)
+
+        return group
+
+    def _pick_status_color(self, status: str) -> None:
+        current = self._status_colors.get(status, QColor("#FFFFFF"))
+        color = QColorDialog.getColor(current, self, f"{status} の色を選択")
+        if color.isValid():
+            self._status_colors[status] = color
+            self._update_status_color_btn(status)
+
+    def _update_status_color_btn(self, status: str) -> None:
+        color = self._status_colors.get(status, QColor("#FFFFFF"))
+        btn = self._status_color_btns[status]
+        btn.setText(color.name())
+        text_color = "#000000" if color.lightness() > 128 else "#FFFFFF"
+        btn.setStyleSheet(
+            f"background-color: {color.name()}; color: {text_color};"
+        )
 
     def _pick_accent_color(self) -> None:
         color = QColorDialog.getColor(self._accent_color, self, "チップ色を選択")

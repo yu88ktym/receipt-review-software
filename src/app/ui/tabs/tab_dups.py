@@ -6,11 +6,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from app.config import theme
 
-_HEADERS = ["レシートID", "重複元レシートID", "関係識別コード", "詳細", "解除"]
+_HEADERS = ["レシートID", "重複元レシートID", "詳細", "重複解除"]
 
 _DUMMY_DUPS = [
-    ("R-0002", "R-0001", "EXACT"),
-    ("R-0004", "R-0001", "SIMILAR"),
+    ("R-0002", "R-0001"),
+    ("R-0004", "R-0001"),
 ]
 
 
@@ -32,14 +32,16 @@ class TabDups(QWidget):
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(2, 70)
         self.table.setColumnWidth(3, 70)
-        self.table.setColumnWidth(4, 70)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
+        self.table.setSortingEnabled(True)
+        self.table.horizontalHeader().setSortIndicatorShown(True)
         root.addWidget(self.table)
 
         root.addWidget(_divider())
@@ -81,6 +83,7 @@ class TabDups(QWidget):
         root.addWidget(swap_group)
 
     def _populate(self) -> None:
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         for row_data in _DUMMY_DUPS:
             row = self.table.rowCount()
@@ -91,11 +94,12 @@ class TabDups(QWidget):
                 self.table.setItem(row, col, item)
 
             detail_btn = QPushButton("詳細")
-            self.table.setCellWidget(row, 3, detail_btn)
+            self.table.setCellWidget(row, 2, detail_btn)
 
             release_btn = QPushButton("解除")
             release_btn.setProperty("flat", "true")
-            self.table.setCellWidget(row, 4, release_btn)
+            self.table.setCellWidget(row, 3, release_btn)
+        self.table.setSortingEnabled(True)
 
 
 def _divider() -> QFrame:
