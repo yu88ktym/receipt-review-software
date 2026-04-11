@@ -1,13 +1,27 @@
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
+    QFileDialog, QProgressBar, QMessageBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from app.config import theme
 
 
 class TabUpload(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    """画像アップロードタブ。複数の画像ファイルを選択して一括送信する。
+
+    upload_completed シグナルは送信成功時に発火し、一覧タブのリフレッシュをトリガーする。
+    """
+
+    upload_completed = Signal()
+
+    def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._api_client = api_client
         self._selected_files: list[str] = []
         self._build_ui()
 
@@ -27,15 +41,19 @@ class TabUpload(QWidget):
         select_row.addStretch()
         root.addLayout(select_row)
 
-        self.send_btn = QPushButton("送信")
+        self.send_btn = QPushButton("選択した画像を送信")
         self.send_btn.setEnabled(False)
+        self.send_btn.clicked.connect(self._on_send)
         root.addWidget(self.send_btn)
 
-        root.addSpacing(theme.MARGIN * 2)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root.addWidget(self.progress_bar)
 
-        history_lbl = QLabel("送信履歴")
-        history_lbl.setProperty("heading", "true")
-        root.addWidget(history_lbl)
+        self.result_lbl = QLabel()
+        self.result_lbl.setWordWrap(True)
+        root.addWidget(self.result_lbl)
 
         root.addStretch()
 
@@ -50,3 +68,52 @@ class TabUpload(QWidget):
         else:
             self.file_count_lbl.setText("ファイルが選択されていません")
             self.send_btn.setEnabled(False)
+
+    def _on_send(self) -> None:
+        """選択済みファイルを API に一件ずつ送信する。"""
+        if not self._selected_files:
+            return
+
+        if self._api_client is None:
+            QMessageBox.warning(self, "設定エラー", "APIクライアントが設定されていません。")
+            return
+
+        total = len(self._selected_files)
+        success_count = 0
+        fail_count = 0
+        fail_names: list[str] = []
+
+        self.send_btn.setEnabled(False)
+        self.select_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setMaximum(total)
+        self.progress_bar.setValue(0)
+        self.result_lbl.clear()
+
+        for i, file_path in enumerate(self._selected_files, 1):
+            try:
+                image_bytes = Path(file_path).read_bytes()
+                upload_id = uuid.uuid4().hex
+                self._api_client.ingest_image(image_bytes, upload_id)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+                fail_names.append(Path(file_path).name)
+
+            self.progress_bar.setValue(i)
+
+        self.progress_bar.setVisible(False)
+        self.select_btn.setEnabled(True)
+
+        # 結果表示
+        lines = [f"送信完了: 成功 {success_count} 件、失敗 {fail_count} 件"]
+        if fail_names:
+            lines.append("失敗ファイル: " + "、".join(fail_names))
+        self.result_lbl.setText("\n".join(lines))
+
+        # 選択状態をリセット
+        self._selected_files = []
+        self.file_count_lbl.setText("ファイルが選択されていません")
+
+        if success_count > 0:
+            self.upload_completed.emit()

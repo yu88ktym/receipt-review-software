@@ -1,34 +1,40 @@
+from __future__ import annotations
+
+import math
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QHeaderView, QSizePolicy,
+    QPushButton, QLabel, QHeaderView, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
 from app.config.status_colors import apply_row_colors
+from app.models.types import ImageMeta
+from app.ui.ui_utils import image_meta_to_row
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス/重要", "操作"]
 
 # ステータス値が格納される列インデックス
 _STATUS_COL = 6
 
-_DUMMY_ROWS = [
-    ("R-0001", "2024-01-15", "2024-01-14", "¥3,200", "コンビニA", "現金", "FINAL_UPDATED"),
-    ("R-0002", "2024-01-16", "2024-01-15", "¥1,500", "スーパーB", "クレジット", "REVIEWED"),
-    ("R-0003", "2024-01-17", "2024-01-16", "¥8,400", "レストランC", "電子マネー", "PENDING"),
-    ("R-0004", "2024-01-18", "2024-01-17", "¥640", "カフェD", "現金", "PENDING"),
-    ("R-0005", "2024-01-19", "2024-01-18", "¥12,000", "百貨店E", "クレジット", "FINAL_UPDATED"),
-]
+_DEFAULT_PAGE_SIZE = 50
 
 
 class TabList(QWidget):
+    """一覧タブ。ReceiptsService を通じて取得した実データをテーブルに表示する。"""
+
     detail_requested = Signal(dict)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, service=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._service = service
         self._page = 1
-        self._total_pages = 3
+        self._page_size = _DEFAULT_PAGE_SIZE
+        self._all_items: list[ImageMeta] = []
+        self._current_filters: dict = {}
         self._build_ui()
-        self._populate()
+        if self._service is not None:
+            self.load_data()
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -68,41 +74,93 @@ class TabList(QWidget):
 
         self._update_pager()
 
+    # ------------------------------------------------------------------
+    # 公開インターフェース
+    # ------------------------------------------------------------------
+
+    def load_data(self, filters: dict | None = None) -> None:
+        """フィルタ条件でサービスからデータを取得してテーブルを再描画する。"""
+        if filters is not None:
+            self._current_filters = filters
+            self._page_size = filters.get("page_size", _DEFAULT_PAGE_SIZE)
+
+        if self._service is None:
+            return
+
+        try:
+            self._all_items = self._service.fetch_list(
+                status=self._current_filters.get("status"),
+                quality_level=self._current_filters.get("quality_level"),
+                keyword=self._current_filters.get("keyword"),
+                since=self._current_filters.get("since"),
+                until=self._current_filters.get("until"),
+                exclude_duplicates=self._current_filters.get("exclude_duplicates", False),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "通信エラー", f"データの取得に失敗しました。\n{exc}")
+            return
+
+        self._page = 1
+        self._populate()
+
+    def refresh(self) -> None:
+        """キャッシュをクリアしてデータを再取得する。"""
+        if self._service is not None:
+            self._service.invalidate_cache()
+        self.load_data()
+
+    # ------------------------------------------------------------------
+    # 内部処理
+    # ------------------------------------------------------------------
+
     def _populate(self) -> None:
+        """現在ページのデータをテーブルに描画する。"""
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
-        for row_data in _DUMMY_ROWS:
+
+        page_items = self._current_page_items()
+        for item in page_items:
+            row_data = image_meta_to_row(item)
             row = self.table.rowCount()
             self.table.insertRow(row)
             for col, val in enumerate(row_data):
-                item = QTableWidgetItem(val)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, col, item)
+                cell = QTableWidgetItem(val)
+                cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, col, cell)
             detail_btn = QPushButton("詳細")
-            detail_btn.clicked.connect(lambda checked, r=row_data: self._on_detail(r))
+            # クロージャにより item の参照を確定させる
+            detail_btn.clicked.connect(lambda checked, d=item: self._on_detail(d))
             self.table.setCellWidget(row, len(_HEADERS) - 1, detail_btn)
-        self._apply_row_colors()
-        self.table.setSortingEnabled(True)
 
-    def _apply_row_colors(self) -> None:
         apply_row_colors(self.table, _STATUS_COL)
+        self.table.setSortingEnabled(True)
+        self._update_pager()
 
-    def _on_detail(self, row_data: tuple) -> None:
-        keys = ["receipt_id", "upload_date", "purchase_date", "total_amount",
-                "store_name", "payment_method", "status"]
-        self.detail_requested.emit(dict(zip(keys, row_data)))
+    def _current_page_items(self) -> list[ImageMeta]:
+        start = (self._page - 1) * self._page_size
+        end = start + self._page_size
+        return self._all_items[start:end]
+
+    def _total_pages(self) -> int:
+        if not self._all_items:
+            return 1
+        return math.ceil(len(self._all_items) / self._page_size)
+
+    def _on_detail(self, item: ImageMeta) -> None:
+        self.detail_requested.emit(dict(item))
 
     def _prev_page(self) -> None:
         if self._page > 1:
             self._page -= 1
-            self._update_pager()
+            self._populate()
 
     def _next_page(self) -> None:
-        if self._page < self._total_pages:
+        if self._page < self._total_pages():
             self._page += 1
-            self._update_pager()
+            self._populate()
 
     def _update_pager(self) -> None:
-        self.page_label.setText(f"ページ {self._page} / {self._total_pages}")
+        total = self._total_pages()
+        self.page_label.setText(f"ページ {self._page} / {total}")
         self.prev_btn.setEnabled(self._page > 1)
-        self.next_btn.setEnabled(self._page < self._total_pages)
+        self.next_btn.setEnabled(self._page < total)

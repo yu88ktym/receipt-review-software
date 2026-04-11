@@ -2,15 +2,26 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QComboBox, QCheckBox, QDateEdit, QSpinBox, QFrame,
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, Signal
 from app.config import theme
+
+# Since/Until の「指定なし」に相当するセンチネル値
+_DATE_UNSET = QDate(2000, 1, 1)
 
 
 class Sidebar(QWidget):
+    """左サイドバー。更新ボタンとフィルタ入力欄を持つ。
+
+    filter_changed シグナルはフィルタ値が変わるたびに発火し、
+    現在のフィルタ辞書を持って一覧タブへ通知する。
+    """
+    filter_changed = Signal(dict)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedWidth(theme.SIDEBAR_WIDTH)
         self._build_ui()
+        self._connect_filter_signals()
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -33,7 +44,9 @@ class Sidebar(QWidget):
 
         root.addWidget(QLabel("ステータス"))
         self.status_combo = QComboBox()
-        self.status_combo.addItems(["すべて", "PENDING", "REVIEWED", "FINAL_UPDATED", "TRASHED"])
+        self.status_combo.addItems(
+            ["すべて", "INGESTED", "OCR_DONE", "FINAL_UPDATED", "DROPPED", "NOT_RECEIPT_SUSPECT"]
+        )
         root.addWidget(self.status_combo)
 
         root.addWidget(QLabel("品質レベル"))
@@ -49,7 +62,7 @@ class Sidebar(QWidget):
         self.since_date.setDisplayFormat("yyyy-MM-dd")
         self.since_date.setCalendarPopup(True)
         self.since_date.setSpecialValueText("指定なし")
-        self.since_date.setDate(QDate(2000, 1, 1))
+        self.since_date.setDate(_DATE_UNSET)
         root.addWidget(self.since_date)
 
         root.addWidget(QLabel("Until"))
@@ -67,6 +80,37 @@ class Sidebar(QWidget):
         root.addWidget(self.page_size_spin)
 
         root.addStretch()
+
+    def _connect_filter_signals(self) -> None:
+        """各フィルタウィジェットの変更イベントを filter_changed シグナルに接続する。"""
+        self.keyword_edit.textChanged.connect(self._emit_filter_changed)
+        self.status_combo.currentIndexChanged.connect(self._emit_filter_changed)
+        self.quality_combo.currentIndexChanged.connect(self._emit_filter_changed)
+        self.exclude_dups_chk.stateChanged.connect(self._emit_filter_changed)
+        self.since_date.dateChanged.connect(self._emit_filter_changed)
+        self.until_date.dateChanged.connect(self._emit_filter_changed)
+        self.page_size_spin.valueChanged.connect(self._emit_filter_changed)
+
+    def _emit_filter_changed(self, *_args) -> None:
+        self.filter_changed.emit(self.get_filters())
+
+    def get_filters(self) -> dict:
+        """現在のフィルタ値を辞書で返す。"""
+        status_text = self.status_combo.currentText()
+        quality_text = self.quality_combo.currentText()
+
+        since_date = self.since_date.date()
+        until_date = self.until_date.date()
+
+        return {
+            "keyword": self.keyword_edit.text().strip() or None,
+            "status": None if status_text == "すべて" else status_text,
+            "quality_level": None if quality_text == "すべて" else quality_text,
+            "exclude_duplicates": self.exclude_dups_chk.isChecked(),
+            "since": since_date.toString("yyyy-MM-dd") if since_date != _DATE_UNSET else None,
+            "until": until_date.toString("yyyy-MM-dd"),
+            "page_size": self.page_size_spin.value(),
+        }
 
 
 def _divider() -> QFrame:
