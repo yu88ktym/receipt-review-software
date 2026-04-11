@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QDate
 from app.config import theme
-from app.config.status_colors import get_row_color
+from app.config.status_colors import apply_row_colors
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "操作"]
 
@@ -110,15 +110,7 @@ class TabFinalEdit(QWidget):
         self.table.setSortingEnabled(True)
 
     def _apply_row_colors(self) -> None:
-        """ステータス列の値に応じて行全体の背景色を設定する。"""
-        for row in range(self.table.rowCount()):
-            status_item = self.table.item(row, _STATUS_COL)
-            status = status_item.text() if status_item else ""
-            color = get_row_color(status)
-            for col in range(self.table.columnCount()):
-                item = self.table.item(row, col)
-                if item is not None:
-                    item.setBackground(color)
+        apply_row_colors(self.table, _STATUS_COL)
 
     def _on_selection_changed(self) -> None:
         selected = self.table.selectedItems()
