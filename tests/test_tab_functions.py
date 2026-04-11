@@ -26,7 +26,7 @@ def test_trash_button_mode_dropped() -> None:
     assert resolve_trash_button_mode("DROPPED") == "restore"
 
 
-def test_trash_button_mode_non_dropped(status: str = "INGESTED") -> None:
+def test_trash_button_mode_non_dropped() -> None:
     """DROPPED 以外のステータスでは trash モードになる。"""
     for s in ("INGESTED", "OCR_DONE", "FINAL_UPDATED", "NOT_RECEIPT_SUSPECT", ""):
         assert resolve_trash_button_mode(s) == "trash", f"status={s!r} should be 'trash'"

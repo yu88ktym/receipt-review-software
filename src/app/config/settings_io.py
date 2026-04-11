@@ -13,7 +13,7 @@ def load_settings() -> dict:
     if _SETTINGS_PATH.exists():
         try:
             return json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             return {}
     return {}
 

@@ -256,7 +256,7 @@ class TabSettings(QWidget):
         self.settings_saved.emit(settings)
 
     def _load_saved_settings(self) -> None:
-        """起動時に settings.json から値を読み込んで GUI に反映する。"""
+        """初期化時に settings.json から値を読み込んで GUI に反映する。"""
         data = load_settings()
         if not data:
             return
