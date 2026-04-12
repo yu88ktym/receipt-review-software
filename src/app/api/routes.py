@@ -13,8 +13,8 @@ class ApiRoutes:
     def image(self, image_id: str) -> str:
         return f"{self._base}/api/images/{image_id}"
 
-    def image_file(self, image_id: str, variant: str) -> str:
-        return f"{self._base}/api/images/{image_id}/file/{variant}"
+    def image_file(self, image_id: str) -> str:
+        return f"{self._base}/api/images/{image_id}/file"
 
     def ingest(self) -> str:
         return f"{self._base}/api/images/ingest"

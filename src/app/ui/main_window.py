@@ -149,7 +149,6 @@ class MainWindow(QMainWindow):
             self._api_client.move_to_dustbox(image_id)
             self._service.invalidate_cache()
             self._tab_list.refresh()
-            self.detail_panel.setVisible(False)
         except Exception as exc:
             QMessageBox.warning(self, "エラー", f"ゴミ箱への移動に失敗しました。\n{exc}")
 
@@ -160,6 +159,5 @@ class MainWindow(QMainWindow):
             self._api_client.restore_from_dustbox(image_id)
             self._service.invalidate_cache()
             self._tab_list.refresh()
-            self.detail_panel.setVisible(False)
         except Exception as exc:
             QMessageBox.warning(self, "エラー", f"復元に失敗しました。\n{exc}")

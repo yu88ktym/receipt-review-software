@@ -73,9 +73,12 @@ class ApiClient:
         resp.raise_for_status()
         return resp.json()
 
-    def get_image_file(self, image_id: str, variant: str) -> bytes:
-        """画像バイナリを取得する。variant は "original" / "thumbnail" 等。"""
-        resp = self._session.get(self._routes.image_file(image_id, variant))
+    def get_image_file(self, image_id: str, variant: str = "thumb") -> bytes:
+        """画像バイナリを取得する。variant は "original" / "thumb" 等。"""
+        resp = self._session.get(
+            self._routes.image_file(image_id),
+            params={"variant": variant},
+        )
         resp.raise_for_status()
         return resp.content
 
