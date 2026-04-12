@@ -96,12 +96,13 @@ def test_get_image_not_found(api_client: ApiClient, requests_mock) -> None:
 
 def test_get_image_file_success(api_client: ApiClient, requests_mock) -> None:
     image_id = "R-0001"
-    requests_mock.get(
-        _ROUTES.image_file(image_id, "original"),
+    adapter = requests_mock.get(
+        _ROUTES.image_file(image_id),
         content=b"\xff\xd8\xff",
     )
     data = api_client.get_image_file(image_id, "original")
     assert data == b"\xff\xd8\xff"
+    assert adapter.last_request.qs == {"variant": ["original"]}
 
 
 # -----------------------------------------------------------------------
