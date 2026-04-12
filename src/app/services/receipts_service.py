@@ -92,19 +92,26 @@ class ReceiptsService:
             kw = keyword.lower()
             result = [
                 r for r in result
-                if kw in (r.get("store_name") or "").lower()
-                or kw in (r.get("image_id") or "").lower()
+                if kw in (r.get("image_id") or "").lower()
+                or kw in (_receipt_store_name(r) or "").lower()
             ]
         if since:
             result = [
                 r for r in result
-                if (r.get("upload_date") or "") >= since
+                if (r.get("created_at") or "") >= since
             ]
         if until:
             result = [
                 r for r in result
-                if (r.get("upload_date") or "") <= until
+                if (r.get("created_at") or "") <= until
             ]
         if exclude_duplicates:
-            result = [r for r in result if not r.get("is_duplicate", False)]
+            result = [r for r in result if not r.get("dedup_hit", False)]
         return result
+
+
+def _receipt_store_name(meta: ImageMeta) -> str:
+    """final_receipt → ocr_receipt_info の順で店名を返す。"""
+    final: dict = meta.get("final_receipt") or {}
+    ocr: dict = meta.get("ocr_receipt_info") or {}
+    return final.get("store_name") or ocr.get("store_name") or ""

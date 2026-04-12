@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QTabWidget, QSplitter,
+    QMainWindow, QWidget, QHBoxLayout, QTabWidget, QSplitter, QMessageBox,
 )
 from PySide6.QtCore import Qt
 
 from app.config import theme
+from app.config.env import USE_MOCK, API_BASE, API_KEY
 from app.ui.sidebar import Sidebar
 from app.ui.detail_panel import DetailPanel
 from app.ui.tabs.tab_list import TabList
@@ -14,6 +15,16 @@ from app.ui.tabs.tab_autocomplete import TabAutocomplete
 from app.ui.tabs.tab_export_csv import TabExportCsv
 from app.ui.tabs.tab_upload import TabUpload
 from app.ui.tabs.tab_settings import TabSettings
+from app.services.receipts_service import ReceiptsService
+
+
+def _build_api_client():
+    """USE_MOCKフラグに応じてAPIクライアントを生成する。"""
+    if USE_MOCK:
+        from app.api.mock_client import MockApiClient
+        return MockApiClient()
+    from app.api.client import ApiClient
+    return ApiClient(API_BASE, API_KEY)
 
 
 class MainWindow(QMainWindow):
@@ -21,6 +32,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Receipt Review Software")
         self.setMinimumSize(1800, 1000)
+        self._client = _build_api_client()
+        self._service = ReceiptsService(self._client)  # type: ignore[arg-type]
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -41,7 +54,7 @@ class MainWindow(QMainWindow):
 
         # 中央タブ
         self.tabs = QTabWidget()
-        self._tab_list = TabList()
+        self._tab_list = TabList(service=self._service)
         self._tab_final_edit = TabFinalEdit()
         self._tab_quality = TabQuality()
         self._tab_dups = TabDups()
@@ -62,6 +75,8 @@ class MainWindow(QMainWindow):
         # 右詳細パネル
         self.detail_panel = DetailPanel()
         self.detail_panel.closed.connect(self._on_detail_closed)
+        self.detail_panel.trash_requested.connect(self._on_trash_requested)
+        self.detail_panel.restore_requested.connect(self._on_restore_requested)
 
         splitter.addWidget(self.tabs)
         splitter.addWidget(self.detail_panel)
@@ -82,3 +97,25 @@ class MainWindow(QMainWindow):
 
     def _on_detail_closed(self) -> None:
         self.detail_panel.setVisible(False)
+
+    def _on_trash_requested(self, image_id: str) -> None:
+        if not image_id:
+            return
+        try:
+            self._client.move_to_dustbox(image_id)
+            self._service.invalidate_cache()
+            self._tab_list.refresh()
+            self.detail_panel.setVisible(False)
+        except Exception as exc:
+            QMessageBox.warning(self, "エラー", f"ゴミ箱への移動に失敗しました。\n{exc}")
+
+    def _on_restore_requested(self, image_id: str) -> None:
+        if not image_id:
+            return
+        try:
+            self._client.restore_from_dustbox(image_id)
+            self._service.invalidate_cache()
+            self._tab_list.refresh()
+            self.detail_panel.setVisible(False)
+        except Exception as exc:
+            QMessageBox.warning(self, "エラー", f"復元に失敗しました。\n{exc}")

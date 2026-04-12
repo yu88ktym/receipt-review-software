@@ -70,17 +70,14 @@ class MockApiClient:
         new_id = f"R-{uuid.uuid4().hex[:6].upper()}"
         img: ImageMeta = {
             "image_id": new_id,
-            "upload_date": "",
-            "purchase_date": None,
-            "total_amount": None,
-            "store_name": None,
-            "payment_method": None,
+            "created_at": "",
             "status": "INGESTED",
             "quality_level": "UNSET",
-            "consistency_status": "UNSET",
-            "is_duplicate": False,
-            "parent_image_id": None,
-            "etag": None,
+            "integrity_status": "UNSET",
+            "dedup_hit": False,
+            "duplicate_of": None,
+            "ocr_receipt_info": None,
+            "final_receipt": None,
         }
         self._images.append(img)
         self._etag = uuid.uuid4().hex
