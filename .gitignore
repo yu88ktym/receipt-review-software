@@ -19,6 +19,7 @@ dist/
 *.spec
 
 # Environment
+src/app/.env
 .env
 .env.local
 

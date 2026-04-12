@@ -1,15 +1,26 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QLabel,
     QSpinBox, QSlider, QLineEdit, QCheckBox, QGroupBox, QColorDialog,
-    QFrame, QScrollArea,
+    QFrame, QScrollArea, QMessageBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from app.config import theme
 from app.config import status_colors
+from app.config.settings_io import load_settings, save_settings
 
 
 class TabSettings(QWidget):
+    """設定タブ。各種パラメータを GUI で編集し settings.json に保存する。
+
+    settings_saved シグナルには保存後の設定辞書が渡される。
+    MainWindow はこのシグナルを受け取り画面全体の再適用処理を行う。
+    """
+
+    settings_saved = Signal(dict)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._accent_color = QColor(theme.COLOR_ACCENT)
@@ -18,6 +29,7 @@ class TabSettings(QWidget):
         }
         self._status_color_btns: dict[str, QPushButton] = {}
         self._build_ui()
+        self._load_saved_settings()
 
     def _build_ui(self) -> None:
         # スクロール可能にして設定項目が増えても見切れないようにする
@@ -46,8 +58,9 @@ class TabSettings(QWidget):
 
         root.addStretch()
 
-        save_btn = QPushButton("保存")
-        root.addWidget(save_btn)
+        self.save_btn = QPushButton("保存")
+        self.save_btn.clicked.connect(self._on_save)
+        root.addWidget(self.save_btn)
 
         scroll.setWidget(container)
         outer = QVBoxLayout(self)
@@ -181,6 +194,10 @@ class TabSettings(QWidget):
 
         return group
 
+    # ------------------------------------------------------------------
+    # 色選択
+    # ------------------------------------------------------------------
+
     def _pick_status_color(self, status: str) -> None:
         current = self._status_colors.get(status, QColor("#FFFFFF"))
         color = QColorDialog.getColor(current, self, f"{status} の色を選択")
@@ -208,6 +225,72 @@ class TabSettings(QWidget):
         self.accent_color_btn.setStyleSheet(
             f"background-color: {self._accent_color.name()}; color: #FFFFFF;"
         )
+
+    # ------------------------------------------------------------------
+    # 設定の保存・読み込み
+    # ------------------------------------------------------------------
+
+    def get_current_settings(self) -> dict:
+        """現在の GUI 状態から設定辞書を生成する。"""
+        return {
+            "page_size": self.page_size_spin.value(),
+            "detail_panel_width_percent": self.sidebar_width_slider.value(),
+            "date_format": self.date_format_edit.text(),
+            "amount_format": self.amount_format_edit.text(),
+            "accent_color": self._accent_color.name(),
+            "thumbnail_enabled": self.thumbnail_chk.isChecked(),
+            "diff_page_size": self.diff_page_size_spin.value(),
+            "auto_interval": self.auto_interval_spin.value(),
+            "grid_visible": self.grid_chk.isChecked(),
+            "column_widths": {k: v.value() for k, v in self.col_width_spins.items()},
+            "status_colors": {k: v.name() for k, v in self._status_colors.items()},
+        }
+
+    def _on_save(self) -> None:
+        settings = self.get_current_settings()
+        try:
+            save_settings(settings)
+        except Exception as exc:
+            QMessageBox.warning(self, "保存エラー", f"設定の保存に失敗しました。\n{exc}")
+            return
+        self.settings_saved.emit(settings)
+
+    def _load_saved_settings(self) -> None:
+        """初期化時に settings.json から値を読み込んで GUI に反映する。"""
+        data = load_settings()
+        if not data:
+            return
+
+        if "page_size" in data:
+            self.page_size_spin.setValue(data["page_size"])
+        if "detail_panel_width_percent" in data:
+            self.sidebar_width_slider.setValue(data["detail_panel_width_percent"])
+        if "date_format" in data:
+            self.date_format_edit.setText(data["date_format"])
+        if "amount_format" in data:
+            self.amount_format_edit.setText(data["amount_format"])
+        if "accent_color" in data:
+            self._accent_color = QColor(data["accent_color"])
+            self._update_accent_btn()
+        if "thumbnail_enabled" in data:
+            self.thumbnail_chk.setChecked(data["thumbnail_enabled"])
+        if "diff_page_size" in data:
+            self.diff_page_size_spin.setValue(data["diff_page_size"])
+        if "auto_interval" in data:
+            self.auto_interval_spin.setValue(data["auto_interval"])
+        if "grid_visible" in data:
+            self.grid_chk.setChecked(data["grid_visible"])
+        if "column_widths" in data:
+            for name, value in data["column_widths"].items():
+                if name in self.col_width_spins:
+                    self.col_width_spins[name].setValue(value)
+        if "status_colors" in data:
+            for s, hex_color in data["status_colors"].items():
+                color = QColor(hex_color)
+                if color.isValid():
+                    self._status_colors[s] = color
+                    if s in self._status_color_btns:
+                        self._update_status_color_btn(s)
 
 
 def _divider() -> QFrame:

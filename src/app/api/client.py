@@ -58,7 +58,11 @@ class ApiClient:
             return [], etag
         resp.raise_for_status()
         new_etag = resp.headers.get("ETag", _ETAG_NONE)
-        return resp.json(), new_etag
+        data = resp.json()
+        # APIレスポンスが {"items": [...]} 形式の場合は items を取り出す
+        if isinstance(data, dict) and "items" in data:
+            return data["items"], new_etag
+        return data, new_etag
 
     # ------------------------------------------------------------------
     # 単一画像
