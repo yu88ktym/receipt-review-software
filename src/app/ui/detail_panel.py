@@ -102,6 +102,8 @@ class DetailPanel(QWidget):
         trash_heading = QLabel("ゴミ箱操作")
         layout.addWidget(trash_heading)
 
+        trash_row = QHBoxLayout()
+
         # ステータスに応じて一方のみ表示する（load() で切り替え）
         self.trash_btn = QPushButton("🗑️ ゴミ箱へ移動")
         self.trash_btn.setProperty("danger", "true")
