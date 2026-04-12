@@ -3,17 +3,22 @@ from typing import TypedDict
 
 class ImageMeta(TypedDict, total=False):
     image_id: str
-    upload_date: str
-    purchase_date: str
-    total_amount: int | None
-    store_name: str | None
-    payment_method: str | None
+    upload_id: str
+    sha256: str
+    original_image_url: str
+    thumb_image_url: str
+    duplicate_of: str | None
+    dedup_hit: bool
     status: str
     quality_level: str
-    consistency_status: str
-    is_duplicate: bool
-    parent_image_id: str | None
-    etag: str | None
+    integrity_status: str
+    created_at: str
+    updated_at: str | None
+    rev: int
+    # OCR結果・確定情報（ネスト構造）
+    ocr_receipt_info: dict | None
+    final_receipt: dict | None
+    flags: list[str] | None
 
 
 class IngestImageResponse(TypedDict):

@@ -12,10 +12,13 @@ class DetailPanel(QWidget):
     """詳細パネル。選択されたレシートの詳細情報・画像・操作ボタンを表示する。"""
 
     closed = Signal()
+    trash_requested = Signal(str)    # image_id
+    restore_requested = Signal(str)  # image_id
     list_refresh_needed = Signal()
 
     def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._current_image_id: str = ""
         self._api_client = api_client
         self._current_image_id: str | None = None
         self._build_ui()
@@ -52,14 +55,14 @@ class DetailPanel(QWidget):
         self.fields: dict[str, QLabel] = {}
         field_defs = [
             ("image_id", "レシートID"),
-            ("upload_date", "アップロード日"),
-            ("purchase_date", "購入日"),
+            ("created_at", "アップロード日"),
+            ("purchased_at", "購入日"),
             ("total_amount", "合計金額"),
             ("store_name", "店名"),
             ("payment_method", "支払方法"),
             ("status", "ステータス"),
             ("quality_level", "品質レベル"),
-            ("consistency_status", "整合性ステータス"),
+            ("integrity_status", "整合性ステータス"),
         ]
         for key, label_text in field_defs:
             row = QHBoxLayout()
@@ -102,13 +105,17 @@ class DetailPanel(QWidget):
         # ステータスに応じて一方のみ表示する（load() で切り替え）
         self.trash_btn = QPushButton("🗑️ ゴミ箱へ移動")
         self.trash_btn.setProperty("danger", "true")
-        self.trash_btn.clicked.connect(self._on_move_to_trash)
-        layout.addWidget(self.trash_btn)
-
-        self.restore_btn = QPushButton("♻️ ゴミ箱から復元")
+        self.trash_btn.clicked.connect(
+            lambda: self.trash_requested.emit(self._current_image_id)
+        )
+        self.restore_btn = QPushButton("復元")
         self.restore_btn.setProperty("flat", "true")
-        self.restore_btn.clicked.connect(self._on_restore)
-        layout.addWidget(self.restore_btn)
+        self.restore_btn.clicked.connect(
+            lambda: self.restore_requested.emit(self._current_image_id)
+        )
+        trash_row.addWidget(self.trash_btn)
+        trash_row.addWidget(self.restore_btn)
+        layout.addLayout(trash_row)
 
         layout.addStretch()
 
@@ -120,31 +127,47 @@ class DetailPanel(QWidget):
     # ------------------------------------------------------------------
 
     def load(self, data: dict) -> None:
-        """レシートデータを受け取り詳細パネルに表示する。
-
-        data のキーは field_defs の key に対応する。
-        image_pixmap キーが存在すれば QPixmap として画像を表示する。
         """
-        self._current_image_id = data.get("image_id")
+        ImageMeta（dict）を受け取り詳細パネルを更新する。
+        フラット・ネスト両形式に対応する。
+        """
+        final: dict = data.get("final_receipt") or {}
+        ocr: dict = data.get("ocr_receipt_info") or {}
 
-        for key, lbl in self.fields.items():
-            value = data.get(key)
-            lbl.setText("—" if value is None else str(value))
+        # image_id / created_at はトップレベル
+        self._current_image_id = str(data.get("image_id", ""))
+        self.fields["image_id"].setText(self._current_image_id or "—")
+        self.fields["created_at"].setText(str(data.get("created_at", "—")))
 
-        # 画像
-        pixmap: QPixmap | None = data.get("image_pixmap")
-        if pixmap and not pixmap.isNull():
-            self.image_label.setPixmap(
-                pixmap.scaled(
-                    self.image_label.width(),
-                    self.image_label.height(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-        else:
-            self.image_label.setText("画像なし")
-            self.image_label.setPixmap(QPixmap())
+        # 購入情報は final_receipt → ocr_receipt_info の順で参照
+        self.fields["purchased_at"].setText(
+            str(final.get("purchased_at") or ocr.get("purchased_at") or "—")
+        )
+        total = (
+            final["total_amount"] if "total_amount" in final and final["total_amount"] is not None
+            else ocr.get("total_amount")
+        )
+        self.fields["total_amount"].setText(f"¥{total:,}" if total is not None else "—")
+        self.fields["store_name"].setText(
+            str(final.get("store_name") or ocr.get("store_name") or "—")
+        )
+        self.fields["payment_method"].setText(
+            str(final.get("payment_method") or ocr.get("payment_method") or "—")
+        )
+
+        status = str(data.get("status", "—"))
+        self.fields["status"].setText(status)
+        self.fields["quality_level"].setText(str(data.get("quality_level", "—")))
+        self.fields["integrity_status"].setText(str(data.get("integrity_status", "—")))
+
+        # ゴミ箱/復元ボタンをステータスに応じて切り替え
+        is_dropped = status == "DROPPED"
+        self.trash_btn.setVisible(not is_dropped)
+        self.restore_btn.setVisible(is_dropped)
+
+        # 画像表示（将来の実装用プレースホルダー）
+        self.image_label.setText("画像なし")
+        self.image_label.setPixmap(QPixmap())
 
         # ゴミ箱操作ボタンの表示切り替え
         status = str(data.get("status") or "")

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import math
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QHeaderView, QMessageBox,
+    QPushButton, QLabel, QHeaderView, QComboBox, QLineEdit, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
@@ -16,8 +14,15 @@ _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金�
 
 # ステータス値が格納される列インデックス
 _STATUS_COL = 6
+_PAGE_SIZE = 50
 
-_DEFAULT_PAGE_SIZE = 50
+_STATUS_OPTIONS = [
+    ("すべて", None),
+    ("INGESTED", "INGESTED"),
+    ("OCR_DONE", "OCR_DONE"),
+    ("FINAL_UPDATED", "FINAL_UPDATED"),
+    ("DROPPED", "DROPPED"),
+]
 
 
 class TabList(QWidget):
@@ -29,9 +34,7 @@ class TabList(QWidget):
         super().__init__(parent)
         self._service = service
         self._page = 1
-        self._page_size = _DEFAULT_PAGE_SIZE
         self._all_items: list[ImageMeta] = []
-        self._current_filters: dict = {}
         self._build_ui()
         if self._service is not None:
             self.load_data()
@@ -40,6 +43,33 @@ class TabList(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
+
+        # フィルタ／更新バー
+        filter_bar = QHBoxLayout()
+
+        status_lbl = QLabel("ステータス：")
+        self.status_combo = QComboBox()
+        for label, _ in _STATUS_OPTIONS:
+            self.status_combo.addItem(label)
+        self.status_combo.currentIndexChanged.connect(self._on_filter_changed)
+
+        keyword_lbl = QLabel("検索：")
+        self.keyword_edit = QLineEdit()
+        self.keyword_edit.setPlaceholderText("ID / 店名")
+        self.keyword_edit.setFixedWidth(200)
+        self.keyword_edit.textChanged.connect(self._on_filter_changed)
+
+        self.refresh_btn = QPushButton("更新")
+        self.refresh_btn.clicked.connect(self._on_refresh)
+
+        filter_bar.addWidget(status_lbl)
+        filter_bar.addWidget(self.status_combo)
+        filter_bar.addSpacing(theme.MARGIN)
+        filter_bar.addWidget(keyword_lbl)
+        filter_bar.addWidget(self.keyword_edit)
+        filter_bar.addStretch()
+        filter_bar.addWidget(self.refresh_btn)
+        root.addLayout(filter_bar)
 
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
@@ -75,42 +105,35 @@ class TabList(QWidget):
         self._update_pager()
 
     # ------------------------------------------------------------------
-    # 公開インターフェース
+    # データ取得
     # ------------------------------------------------------------------
 
-    def load_data(self, filters: dict | None = None) -> None:
-        """フィルタ条件でサービスからデータを取得してテーブルを再描画する。"""
-        if filters is not None:
-            self._current_filters = filters
-            self._page_size = filters.get("page_size", _DEFAULT_PAGE_SIZE)
-
+    def load_data(self, force_refresh: bool = False) -> None:
+        """サービス層からデータを取得してテーブルを更新する。"""
         if self._service is None:
             return
-
+        status = _STATUS_OPTIONS[self.status_combo.currentIndex()][1]
+        keyword = self.keyword_edit.text().strip() or None
         try:
             self._all_items = self._service.fetch_list(
-                status=self._current_filters.get("status"),
-                quality_level=self._current_filters.get("quality_level"),
-                keyword=self._current_filters.get("keyword"),
-                since=self._current_filters.get("since"),
-                until=self._current_filters.get("until"),
-                exclude_duplicates=self._current_filters.get("exclude_duplicates", False),
+                status=status,
+                keyword=keyword,
+                force_refresh=force_refresh,
             )
         except Exception as exc:
             QMessageBox.warning(self, "通信エラー", f"データの取得に失敗しました。\n{exc}")
             return
-
         self._page = 1
         self._populate()
 
     def refresh(self) -> None:
-        """キャッシュをクリアしてデータを再取得する。"""
+        """一覧を強制再取得する（外部からも呼び出し可能）。"""
         if self._service is not None:
             self._service.invalidate_cache()
-        self.load_data()
+        self.load_data(force_refresh=True)
 
     # ------------------------------------------------------------------
-    # 内部処理
+    # 表示更新
     # ------------------------------------------------------------------
 
     def _populate(self) -> None:
@@ -128,10 +151,8 @@ class TabList(QWidget):
                 cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, col, cell)
             detail_btn = QPushButton("詳細")
-            # クロージャにより item の参照を確定させる
-            detail_btn.clicked.connect(lambda checked, d=item: self._on_detail(d))
+            detail_btn.clicked.connect(lambda checked, d=meta: self._on_detail(d))
             self.table.setCellWidget(row, len(_HEADERS) - 1, detail_btn)
-
         apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
         self._update_pager()
@@ -171,7 +192,8 @@ class TabList(QWidget):
             self._populate()
 
     def _update_pager(self) -> None:
-        total = self._total_pages()
-        self.page_label.setText(f"ページ {self._page} / {total}")
+        total = len(self._all_items)
+        self._total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        self.page_label.setText(f"ページ {self._page} / {self._total_pages}")
         self.prev_btn.setEnabled(self._page > 1)
         self.next_btn.setEnabled(self._page < total)

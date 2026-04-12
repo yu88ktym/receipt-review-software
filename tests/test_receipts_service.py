@@ -61,7 +61,8 @@ def test_fetch_list_filter_quality(service: ReceiptsService) -> None:
 def test_fetch_list_filter_keyword_store(service: ReceiptsService) -> None:
     items = service.fetch_list(keyword="コンビニ")
     assert len(items) == 1
-    assert items[0]["store_name"] == "コンビニA"
+    final = items[0].get("final_receipt") or {}
+    assert final.get("store_name") == "コンビニA"
 
 
 def test_fetch_list_filter_keyword_image_id(service: ReceiptsService) -> None:
@@ -76,12 +77,12 @@ def test_fetch_list_filter_keyword_image_id(service: ReceiptsService) -> None:
 
 def test_fetch_list_filter_since(service: ReceiptsService) -> None:
     items = service.fetch_list(since="2024-01-18")
-    assert all(i["upload_date"] >= "2024-01-18" for i in items)
+    assert all(i["created_at"] >= "2024-01-18" for i in items)
 
 
 def test_fetch_list_filter_until(service: ReceiptsService) -> None:
     items = service.fetch_list(until="2024-01-16")
-    assert all(i["upload_date"] <= "2024-01-16" for i in items)
+    assert all(i["created_at"] <= "2024-01-16" for i in items)
 
 
 def test_fetch_list_filter_date_range(service: ReceiptsService) -> None:
@@ -95,7 +96,7 @@ def test_fetch_list_filter_date_range(service: ReceiptsService) -> None:
 
 def test_fetch_list_exclude_duplicates(service: ReceiptsService) -> None:
     items = service.fetch_list(exclude_duplicates=True)
-    assert all(not i.get("is_duplicate", False) for i in items)
+    assert all(not i.get("dedup_hit", False) for i in items)
 
 
 # -----------------------------------------------------------------------
