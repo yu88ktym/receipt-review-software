@@ -21,7 +21,7 @@ from app.ui.tabs.tab_settings import TabSettings
 def _build_api_client():
     """設定に応じて ApiClient または MockApiClient を返す。"""
     if USE_MOCK:
-        from tests.mocks.mock_api_client import MockApiClient  # type: ignore[import]
+        from tests.mocks.mock_api_client import MockApiClient
         return MockApiClient()
     from app.api.client import ApiClient
     return ApiClient(API_BASE, API_KEY)

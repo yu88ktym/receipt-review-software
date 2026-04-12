@@ -8,28 +8,28 @@ class ApiRoutes:
         return f"{self._base}/meta"
 
     def images(self) -> str:
-        return f"{self._base}/images"
+        return f"{self._base}/api/images"
 
     def image(self, image_id: str) -> str:
-        return f"{self._base}/images/{image_id}"
+        return f"{self._base}/api/images/{image_id}"
 
     def image_file(self, image_id: str, variant: str) -> str:
-        return f"{self._base}/images/{image_id}/file/{variant}"
+        return f"{self._base}/api/images/{image_id}/file/{variant}"
 
     def ingest(self) -> str:
-        return f"{self._base}/images/ingest"
+        return f"{self._base}/api/images/ingest"
 
     def dustbox(self, image_id: str) -> str:
-        return f"{self._base}/images/{image_id}/dustbox"
+        return f"{self._base}/api/images/{image_id}/dustbox"
 
     def finalize(self, image_id: str) -> str:
-        return f"{self._base}/images/{image_id}/finalize"
+        return f"{self._base}/api/images/{image_id}/finalize"
 
     def duplicate(self, image_id: str) -> str:
-        return f"{self._base}/images/{image_id}/duplicate"
+        return f"{self._base}/api/images/{image_id}/duplicate"
 
     def reverse_parent(self, old_parent_id: str) -> str:
-        return f"{self._base}/images/{old_parent_id}/reverse-parent"
+        return f"{self._base}/api/images/{old_parent_id}/reverse-parent"
 
     def manual_quality(self, image_id: str) -> str:
-        return f"{self._base}/images/{image_id}/manual-quality"
+        return f"{self._base}/api/images/{image_id}/manual-quality"

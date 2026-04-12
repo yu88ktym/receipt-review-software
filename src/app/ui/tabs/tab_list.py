@@ -137,8 +137,18 @@ class TabList(QWidget):
         self._update_pager()
 
     def _current_page_items(self) -> list[ImageMeta]:
+        """現在のページに表示するアイテムのサブリストを返す。
+        ページサイズやフィルタ条件の変更に応じて、_all_items から適切な範囲を切り出す。
+        args:
+            なし（必要に応じて self._page や self._page_size、self._all_items を参照する）
+        returns:
+            list[ImageMeta]: 現在のページに表示するアイテムのリスト
+        start, end: ページ番号とページサイズに基づいて、_all_items から切り出す範囲を計算する。
+        例: ページサイズが 50 のとき、ページ 1 はインデックス 0-49、ページ 2 はインデックス 50-99、ページ 3 はインデックス 100-149 となる。
+        """
         start = (self._page - 1) * self._page_size
-        end = start + self._page_size
+        end = start + self._page_size if len(self._all_items) >= start + self._page_size else len(self._all_items) - 1
+        print(start, end, self._page_size, len(self._all_items), type(self._all_items))
         return self._all_items[start:end]
 
     def _total_pages(self) -> int:
