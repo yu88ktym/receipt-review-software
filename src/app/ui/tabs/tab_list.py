@@ -147,8 +147,9 @@ class TabList(QWidget):
         例: ページサイズが 50 のとき、ページ 1 はインデックス 0-49、ページ 2 はインデックス 50-99、ページ 3 はインデックス 100-149 となる。
         """
         start = (self._page - 1) * self._page_size
-        end = start + self._page_size if len(self._all_items) >= start + self._page_size else len(self._all_items) - 1
-        print(start, end, self._page_size, len(self._all_items), type(self._all_items))
+        if start >= len(self._all_items):
+            return []
+        end = min(start + self._page_size, len(self._all_items))
         return self._all_items[start:end]
 
     def _total_pages(self) -> int:
