@@ -18,9 +18,8 @@ class DetailPanel(QWidget):
 
     def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._current_image_id: str = ""
-        self._api_client = api_client
         self._current_image_id: str | None = None
+        self._api_client = api_client
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -107,14 +106,10 @@ class DetailPanel(QWidget):
         # ステータスに応じて一方のみ表示する（load() で切り替え）
         self.trash_btn = QPushButton("🗑️ ゴミ箱へ移動")
         self.trash_btn.setProperty("danger", "true")
-        self.trash_btn.clicked.connect(
-            lambda: self.trash_requested.emit(self._current_image_id)
-        )
+        self.trash_btn.clicked.connect(self._on_move_to_trash)
         self.restore_btn = QPushButton("復元")
         self.restore_btn.setProperty("flat", "true")
-        self.restore_btn.clicked.connect(
-            lambda: self.restore_requested.emit(self._current_image_id)
-        )
+        self.restore_btn.clicked.connect(self._on_restore)
         trash_row.addWidget(self.trash_btn)
         trash_row.addWidget(self.restore_btn)
         layout.addLayout(trash_row)
@@ -157,46 +152,44 @@ class DetailPanel(QWidget):
             str(final.get("payment_method") or ocr.get("payment_method") or "—")
         )
 
-        status = str(data.get("status", "—"))
-        self.fields["status"].setText(status)
+        status = str(data.get("status") or "")
+        self.fields["status"].setText(status or "—")
         self.fields["quality_level"].setText(str(data.get("quality_level", "—")))
         self.fields["integrity_status"].setText(str(data.get("integrity_status", "—")))
 
         # ゴミ箱/復元ボタンをステータスに応じて切り替え
-        is_dropped = status == "DROPPED"
-        self.trash_btn.setVisible(not is_dropped)
-        self.restore_btn.setVisible(is_dropped)
-
-        # 画像表示（将来の実装用プレースホルダー）
-        self.image_label.setText("画像なし")
-        self.image_label.setPixmap(QPixmap())
-
-        # ゴミ箱操作ボタンの表示切り替え
-        status = str(data.get("status") or "")
         mode = resolve_trash_button_mode(status)
         self.trash_btn.setVisible(mode == "trash")
         self.restore_btn.setVisible(mode == "restore")
+
+        # サムネイルを読み込む
+        self._load_image("thumb")
 
     # ------------------------------------------------------------------
     # ボタンハンドラ
     # ------------------------------------------------------------------
 
-    def _on_show_original(self) -> None:
-        """原本画像を API から取得して表示する。"""
-        if self._current_image_id is None or self._api_client is None:
+    def _load_image(self, variant: str) -> None:
+        """指定バリアントの画像をAPIから取得して image_label に表示する。"""
+        if not self._current_image_id or self._api_client is None:
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("画像なし")
             return
         try:
-            image_bytes = self._api_client.get_image_file(self._current_image_id, "original")
-        except Exception as exc:
-            QMessageBox.warning(self, "通信エラー", f"画像の取得に失敗しました。\n{exc}")
+            image_bytes = self._api_client.get_image_file(self._current_image_id, variant)
+        except Exception:
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("画像が見つかりません。")
             return
 
         pixmap = QPixmap()
         pixmap.loadFromData(image_bytes)
         if pixmap.isNull():
-            QMessageBox.information(self, "画像", "画像データを読み込めませんでした。")
+            self.image_label.setPixmap(QPixmap())
+            self.image_label.setText("画像が見つかりません。")
             return
 
+        self.image_label.setText("")
         self.image_label.setPixmap(
             pixmap.scaled(
                 self.image_label.width(),
@@ -205,6 +198,12 @@ class DetailPanel(QWidget):
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
+
+    def _on_show_original(self) -> None:
+        """原本画像を API から取得して表示する。"""
+        if self._current_image_id is None or self._api_client is None:
+            return
+        self._load_image("original")
 
     def _on_move_to_trash(self) -> None:
         """ゴミ箱へ移動し、一覧の更新を要求する。"""

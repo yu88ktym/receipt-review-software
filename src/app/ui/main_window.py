@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QTabWidget, QSplitter, QApplication, QMessageBox,
+    QMainWindow, QWidget, QHBoxLayout, QTabWidget, QSplitter, QApplication,
 )
 from PySide6.QtCore import Qt
 
@@ -77,8 +77,6 @@ class MainWindow(QMainWindow):
         # 右詳細パネル
         self.detail_panel = DetailPanel(api_client=self._api_client)
         self.detail_panel.closed.connect(self._on_detail_closed)
-        self.detail_panel.trash_requested.connect(self._on_trash_requested)
-        self.detail_panel.restore_requested.connect(self._on_restore_requested)
 
         self._splitter.addWidget(self.tabs)
         self._splitter.addWidget(self.detail_panel)
@@ -141,23 +139,3 @@ class MainWindow(QMainWindow):
         total = 1000
         detail = total * detail_pct // 100
         self._splitter.setSizes([total - detail, detail])
-
-    def _on_trash_requested(self, image_id: str) -> None:
-        if not image_id:
-            return
-        try:
-            self._api_client.move_to_dustbox(image_id)
-            self._service.invalidate_cache()
-            self._tab_list.refresh()
-        except Exception as exc:
-            QMessageBox.warning(self, "エラー", f"ゴミ箱への移動に失敗しました。\n{exc}")
-
-    def _on_restore_requested(self, image_id: str) -> None:
-        if not image_id:
-            return
-        try:
-            self._api_client.restore_from_dustbox(image_id)
-            self._service.invalidate_cache()
-            self._tab_list.refresh()
-        except Exception as exc:
-            QMessageBox.warning(self, "エラー", f"復元に失敗しました。\n{exc}")
