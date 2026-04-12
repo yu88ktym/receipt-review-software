@@ -132,6 +132,15 @@ class TabList(QWidget):
             self._service.invalidate_cache()
         self.load_data(force_refresh=True)
 
+    def _on_filter_changed(self) -> None:
+        """フィルタ条件（ステータス/キーワード）変更時に一覧を再読み込みする。"""
+        self._page = 1
+        self.load_data()
+
+    def _on_refresh(self) -> None:
+        """更新ボタン押下時にキャッシュをクリアして再読み込みする。"""
+        self.refresh()
+
     # ------------------------------------------------------------------
     # 表示更新
     # ------------------------------------------------------------------
@@ -151,32 +160,19 @@ class TabList(QWidget):
                 cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, col, cell)
             detail_btn = QPushButton("詳細")
-            detail_btn.clicked.connect(lambda checked, d=meta: self._on_detail(d))
+            detail_btn.clicked.connect(lambda checked, d=item: self._on_detail(d))
             self.table.setCellWidget(row, len(_HEADERS) - 1, detail_btn)
         apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
         self._update_pager()
 
     def _current_page_items(self) -> list[ImageMeta]:
-        """現在のページに表示するアイテムのサブリストを返す。
-        ページサイズやフィルタ条件の変更に応じて、_all_items から適切な範囲を切り出す。
-        args:
-            なし（必要に応じて self._page や self._page_size、self._all_items を参照する）
-        returns:
-            list[ImageMeta]: 現在のページに表示するアイテムのリスト
-        start, end: ページ番号とページサイズに基づいて、_all_items から切り出す範囲を計算する。
-        例: ページサイズが 50 のとき、ページ 1 はインデックス 0-49、ページ 2 はインデックス 50-99、ページ 3 はインデックス 100-149 となる。
-        """
-        start = (self._page - 1) * self._page_size
+        """現在のページに表示するアイテムのサブリストを返す。"""
+        start = (self._page - 1) * _PAGE_SIZE
         if start >= len(self._all_items):
             return []
-        end = min(start + self._page_size, len(self._all_items))
+        end = min(start + _PAGE_SIZE, len(self._all_items))
         return self._all_items[start:end]
-
-    def _total_pages(self) -> int:
-        if not self._all_items:
-            return 1
-        return math.ceil(len(self._all_items) / self._page_size)
 
     def _on_detail(self, item: ImageMeta) -> None:
         self.detail_requested.emit(dict(item))
@@ -187,13 +183,13 @@ class TabList(QWidget):
             self._populate()
 
     def _next_page(self) -> None:
-        if self._page < self._total_pages():
+        if self._page < self._num_pages:
             self._page += 1
             self._populate()
 
     def _update_pager(self) -> None:
         total = len(self._all_items)
-        self._total_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
-        self.page_label.setText(f"ページ {self._page} / {self._total_pages}")
+        self._num_pages = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
+        self.page_label.setText(f"ページ {self._page} / {self._num_pages}")
         self.prev_btn.setEnabled(self._page > 1)
-        self.next_btn.setEnabled(self._page < total)
+        self.next_btn.setEnabled(self._page < self._num_pages)
