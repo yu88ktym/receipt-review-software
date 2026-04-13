@@ -116,6 +116,7 @@ class MainWindow(QMainWindow):
         self.detail_panel.setVisible(True)
 
     def _on_detail_closed(self) -> None:
+        self.detail_panel.close_image_viewer()
         self.detail_panel.setVisible(False)
 
     def _on_settings_saved(self, settings: dict) -> None:
