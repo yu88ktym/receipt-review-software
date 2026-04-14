@@ -81,10 +81,19 @@ class ImageViewer(QWidget):
         self._scene = QGraphicsScene(self)
         self._view = _ZoomPanView(self._scene, self)
         layout.addWidget(self._view)
+        self._fit_pending = False
 
     def closeEvent(self, event) -> None:
         self.viewer_closed.emit(self)
         super().closeEvent(event)
+
+    def showEvent(self, event) -> None:
+        """ウィンドウが表示されたタイミングで fitInView を実行する。"""
+        super().showEvent(event)
+        if self._fit_pending and self._scene.items():
+            self._view.resetTransform()
+            self._view.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self._fit_pending = False
 
     def load_image(self, image_bytes: bytes) -> None:
         """画像バイナリを読み込んで表示する。"""
@@ -96,5 +105,9 @@ class ImageViewer(QWidget):
         self._scene.clear()
         self._scene.addPixmap(pixmap)
         self._scene.setSceneRect(pixmap.rect().toRectF())
-        self._view.resetTransform()
-        self._view.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._fit_pending = True
+        # ウィンドウがすでに表示済みなら即座にフィット、未表示なら showEvent で実行される
+        if self.isVisible():
+            self._view.resetTransform()
+            self._view.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self._fit_pending = False
