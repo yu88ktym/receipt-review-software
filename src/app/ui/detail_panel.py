@@ -23,10 +23,10 @@ class DetailPanel(QWidget):
         super().__init__(parent)
         self._current_image_id: str | None = None
         self._api_client = api_client
-        self._image_viewer: ImageViewer | None = None
+        self._image_viewers: list[ImageViewer] = []
         self._thumb_pixmap: QPixmap | None = None
         self._build_ui()
-        self.closed.connect(self._close_image_viewer)
+        self.closed.connect(self._close_image_viewers)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -224,7 +224,7 @@ class DetailPanel(QWidget):
         self._apply_thumb_pixmap()
 
     def _on_show_original(self) -> None:
-        """原本画像を別ウィンドウで表示する。ウィンドウが既にあれば画像を更新する。"""
+        """原本画像を新しい別ウィンドウで表示する。"""
         if self._current_image_id is None or self._api_client is None:
             return
         try:
@@ -233,22 +233,30 @@ class DetailPanel(QWidget):
             QMessageBox.warning(self, "画像取得エラー", f"画像の取得に失敗しました。\n{exc}")
             return
 
-        if self._image_viewer is None:
-            self._image_viewer = ImageViewer(parent=self)
-        self._image_viewer.load_image(image_bytes)
-        self._image_viewer.show()
-        self._image_viewer.raise_()
-        self._image_viewer.activateWindow()
+        viewer = ImageViewer(image_id=self._current_image_id)
+        viewer.load_image(image_bytes)
+        viewer.viewer_closed.connect(self._on_viewer_closed)
+        self._image_viewers.append(viewer)
+        viewer.show()
+        viewer.raise_()
+        viewer.activateWindow()
 
-    def _close_image_viewer(self) -> None:
-        """ImageViewer ウィンドウを閉じる。"""
-        if self._image_viewer is not None:
-            self._image_viewer.close()
-            self._image_viewer = None
+    def _on_viewer_closed(self, viewer: ImageViewer) -> None:
+        """ビューアが閉じられたときにリストから除去する。"""
+        try:
+            self._image_viewers.remove(viewer)
+        except ValueError:
+            pass
+
+    def _close_image_viewers(self) -> None:
+        """すべての ImageViewer ウィンドウを閉じる。"""
+        for viewer in list(self._image_viewers):
+            viewer.close()
+        self._image_viewers.clear()
 
     def close_image_viewer(self) -> None:
         """外部から ImageViewer ウィンドウを閉じる（main_window から呼び出す用）。"""
-        self._close_image_viewer()
+        self._close_image_viewers()
 
     def _on_move_to_trash(self) -> None:
         """ゴミ箱へ移動し、一覧の更新を要求する。"""

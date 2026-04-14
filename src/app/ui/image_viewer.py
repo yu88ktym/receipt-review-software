@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QGraphicsView, QGraphicsScene
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGraphicsView, QGraphicsScene
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QPainter
 
 
@@ -47,27 +47,47 @@ class _ZoomPanView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
 
-class ImageViewer(QDialog):
-    """原本画像を表示するためのビューアウィンドウ。
+class ImageViewer(QWidget):
+    """原本画像を表示するためのビューアウィンドウ（非モーダル）。
 
+    - ウィンドウタイトルは画像ID
+    - 上部に画像ID（コピー可能）を表示
     - マウスホイールで拡大/縮小
     - マウスドラッグで画像の移動（パン）
     """
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("原本画像ビューア")
+    viewer_closed = Signal(object)  # self
+
+    def __init__(self, image_id: str, parent=None) -> None:
+        super().__init__(parent, Qt.WindowType.Window)
+        self.setWindowTitle(image_id)
         self.setMinimumSize(800, 600)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 8, 8, 0)
+        layout.setSpacing(4)
+
+        # 画像IDを上部にコピー可能なテキストとして表示
+        id_row = QHBoxLayout()
+        id_label = QLabel("画像ID：")
+        id_label.setFixedWidth(60)
+        id_value = QLabel(image_id)
+        id_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        id_value.setWordWrap(True)
+        id_row.addWidget(id_label)
+        id_row.addWidget(id_value, stretch=1)
+        layout.addLayout(id_row)
 
         self._scene = QGraphicsScene(self)
         self._view = _ZoomPanView(self._scene, self)
         layout.addWidget(self._view)
 
+    def closeEvent(self, event) -> None:
+        self.viewer_closed.emit(self)
+        super().closeEvent(event)
+
     def load_image(self, image_bytes: bytes) -> None:
-        """画像バイナリを読み込んで表示する。既存の画像があれば更新。"""
+        """画像バイナリを読み込んで表示する。"""
         pixmap = QPixmap()
         pixmap.loadFromData(image_bytes)
         if pixmap.isNull():
