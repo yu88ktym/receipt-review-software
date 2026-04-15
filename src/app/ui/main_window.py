@@ -56,10 +56,10 @@ class MainWindow(QMainWindow):
 
         # 中央タブ
         self.tabs = QTabWidget()
-        self._tab_list = TabList(service=self._service)
-        self._tab_final_edit = TabFinalEdit()
-        self._tab_quality = TabQuality()
-        self._tab_dups = TabDups()
+        self._tab_list = TabList(service=self._service, api_client=self._api_client)
+        self._tab_final_edit = TabFinalEdit(api_client=self._api_client)
+        self._tab_quality = TabQuality(api_client=self._api_client)
+        self._tab_dups = TabDups(api_client=self._api_client)
         self._tab_autocomplete = TabAutocomplete()
         self._tab_export_csv = TabExportCsv()
         self._tab_upload = TabUpload(api_client=self._api_client)

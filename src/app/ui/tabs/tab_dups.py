@@ -1,10 +1,12 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLabel, QLineEdit, QHeaderView, QGroupBox, QFormLayout,
-    QFrame,
+    QFrame, QStackedWidget,
 )
 from PySide6.QtCore import Qt
 from app.config import theme
+from app.config.settings_io import load_settings
+from app.ui.widgets.tile_view import DupsTileView
 
 _HEADERS = ["レシートID", "重複元レシートID", "詳細", "重複解除"]
 
@@ -15,8 +17,10 @@ _DUMMY_DUPS = [
 
 
 class TabDups(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._api_client = api_client
+        self._tile_mode = False
         self._build_ui()
         self._populate()
 
@@ -25,9 +29,20 @@ class TabDups(QWidget):
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
 
+        # ツールバー（切り替えボタン）
+        toolbar = QHBoxLayout()
         dup_label = QLabel("重複候補一覧")
         dup_label.setProperty("heading", "true")
-        root.addWidget(dup_label)
+        toolbar.addWidget(dup_label)
+        toolbar.addStretch()
+        self.view_toggle_btn = QPushButton("サムネイル表示")
+        self.view_toggle_btn.setProperty("flat", "true")
+        self.view_toggle_btn.clicked.connect(self._toggle_view)
+        toolbar.addWidget(self.view_toggle_btn)
+        root.addLayout(toolbar)
+
+        # スタック（テキスト / サムネイル）
+        self._stacked = QStackedWidget()
 
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
@@ -42,7 +57,12 @@ class TabDups(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
         self.table.horizontalHeader().setSortIndicatorShown(True)
-        root.addWidget(self.table)
+        self._stacked.addWidget(self.table)
+
+        self.dup_tile_view = DupsTileView()
+        self._stacked.addWidget(self.dup_tile_view)
+
+        root.addWidget(self._stacked)
 
         root.addWidget(_divider())
 
@@ -82,6 +102,20 @@ class TabDups(QWidget):
 
         root.addWidget(swap_group)
 
+    # ------------------------------------------------------------------
+    # 表示切り替え
+    # ------------------------------------------------------------------
+
+    def _toggle_view(self) -> None:
+        self._tile_mode = not self._tile_mode
+        if self._tile_mode:
+            self._stacked.setCurrentIndex(1)
+            self.view_toggle_btn.setText("テキスト表示")
+            self._populate_tiles()
+        else:
+            self._stacked.setCurrentIndex(0)
+            self.view_toggle_btn.setText("サムネイル表示")
+
     def _populate(self) -> None:
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
@@ -100,6 +134,29 @@ class TabDups(QWidget):
             release_btn.setProperty("flat", "true")
             self.table.setCellWidget(row, 3, release_btn)
         self.table.setSortingEnabled(True)
+
+    def _populate_tiles(self) -> None:
+        """DupsTileView に親子グループを渡す。"""
+        # 親IDごとに子をグルーピング
+        parent_children: dict[str, list[str]] = {}
+        for child_id, parent_id in _DUMMY_DUPS:
+            parent_children.setdefault(parent_id, []).append(child_id)
+
+        groups = [
+            {
+                "parent": {"image_id": pid, "created_at": "—", "status": ""},
+                "children": [
+                    {"image_id": cid, "created_at": "—", "status": ""}
+                    for cid in cids
+                ],
+            }
+            for pid, cids in parent_children.items()
+        ]
+
+        settings = load_settings()
+        tile_w = settings.get("thumbnail_tile_width", 160)
+        tile_h = settings.get("thumbnail_tile_height", 200)
+        self.dup_tile_view.set_groups(groups, self._api_client, tile_w, tile_h)
 
 
 def _divider() -> QFrame:

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
-    QPushButton, QLabel, QHeaderView, QMessageBox,
+    QPushButton, QLabel, QHeaderView, QMessageBox, QStackedWidget,
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
 from app.config.status_colors import apply_row_colors
+from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
 from app.ui.ui_utils import image_meta_to_row
+from app.ui.widgets.tile_view import TileView
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス/重要", "操作"]
 
@@ -20,16 +22,21 @@ _FETCH_FILTER_KEYS = ("status", "quality_level", "keyword", "since", "until", "e
 
 
 class TabList(QWidget):
-    """一覧タブ。ReceiptsService を通じて取得した実データをテーブルに表示する。"""
+    """一覧タブ。ReceiptsService を通じて取得した実データをテーブルに表示する。
+
+    テキスト表示（テーブル）とサムネイル表示（タイルビュー）を切り替え可能。
+    """
 
     detail_requested = Signal(dict)
 
-    def __init__(self, service=None, parent: QWidget | None = None) -> None:
+    def __init__(self, service=None, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._service = service
+        self._api_client = api_client
         self._page = 1
         self._all_items: list[ImageMeta] = []
         self._filters: dict = {}
+        self._tile_mode = False
         self._build_ui()
         if self._service is not None:
             self.load_data()
@@ -39,16 +46,26 @@ class TabList(QWidget):
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
 
-        # 更新バー
-        filter_bar = QHBoxLayout()
+        # ツールバー（切り替えボタン + 更新ボタン）
+        toolbar = QHBoxLayout()
+
+        self.view_toggle_btn = QPushButton("サムネイル表示")
+        self.view_toggle_btn.setProperty("flat", "true")
+        self.view_toggle_btn.clicked.connect(self._toggle_view)
+        toolbar.addWidget(self.view_toggle_btn)
+
+        toolbar.addStretch()
 
         self.refresh_btn = QPushButton("更新")
         self.refresh_btn.clicked.connect(self._on_refresh)
+        toolbar.addWidget(self.refresh_btn)
 
-        filter_bar.addStretch()
-        filter_bar.addWidget(self.refresh_btn)
-        root.addLayout(filter_bar)
+        root.addLayout(toolbar)
 
+        # スタック（テキスト表示 / サムネイル表示）
+        self._stacked = QStackedWidget()
+
+        # インデックス 0: テーブル
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -60,7 +77,14 @@ class TabList(QWidget):
         self.table.setAlternatingRowColors(False)
         self.table.setSortingEnabled(True)
         self.table.horizontalHeader().setSortIndicatorShown(True)
-        root.addWidget(self.table)
+        self._stacked.addWidget(self.table)
+
+        # インデックス 1: タイルビュー
+        self.tile_view = TileView()
+        self.tile_view.item_clicked.connect(lambda d: self.detail_requested.emit(d))
+        self._stacked.addWidget(self.tile_view)
+
+        root.addWidget(self._stacked)
 
         # ページネーション
         pager = QHBoxLayout()
@@ -81,6 +105,20 @@ class TabList(QWidget):
         root.addLayout(pager)
 
         self._update_pager()
+
+    # ------------------------------------------------------------------
+    # 表示切り替え
+    # ------------------------------------------------------------------
+
+    def _toggle_view(self) -> None:
+        self._tile_mode = not self._tile_mode
+        if self._tile_mode:
+            self._stacked.setCurrentIndex(1)
+            self.view_toggle_btn.setText("テキスト表示")
+            self._populate_tiles(self._current_page_items())
+        else:
+            self._stacked.setCurrentIndex(0)
+            self.view_toggle_btn.setText("サムネイル表示")
 
     # ------------------------------------------------------------------
     # データ取得
@@ -122,11 +160,18 @@ class TabList(QWidget):
     # ------------------------------------------------------------------
 
     def _populate(self) -> None:
-        """現在ページのデータをテーブルに描画する。"""
+        """現在ページのデータをアクティブなビューに描画する。"""
+        page_items = self._current_page_items()
+        self._populate_table(page_items)
+        if self._tile_mode:
+            self._populate_tiles(page_items)
+        self._update_pager()
+
+    def _populate_table(self, page_items: list[ImageMeta]) -> None:
+        """テーブルビューを更新する。"""
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
 
-        page_items = self._current_page_items()
         for item in page_items:
             row_data = image_meta_to_row(item)
             row = self.table.rowCount()
@@ -140,7 +185,21 @@ class TabList(QWidget):
             self.table.setCellWidget(row, len(_HEADERS) - 1, detail_btn)
         apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
-        self._update_pager()
+
+    def _populate_tiles(self, page_items: list[ImageMeta]) -> None:
+        """タイルビューを更新する。"""
+        tile_data = [
+            {
+                "image_id": meta.get("image_id", "—"),
+                "created_at": meta.get("created_at", "—"),
+                "status": meta.get("status", ""),
+            }
+            for meta in page_items
+        ]
+        settings = load_settings()
+        tile_w = settings.get("thumbnail_tile_width", 160)
+        tile_h = settings.get("thumbnail_tile_height", 200)
+        self.tile_view.set_items(tile_data, self._api_client, tile_w, tile_h)
 
     def _current_page_items(self) -> list[ImageMeta]:
         """現在のページに表示するアイテムのサブリストを返す。"""
