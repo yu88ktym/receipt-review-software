@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QFrame, QSizePolicy, QMessageBox,
@@ -6,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from app.config import theme
 from app.ui.ui_utils import resolve_trash_button_mode
+from app.ui.image_viewer import ImageViewer
 
 
 class DetailPanel(QWidget):
@@ -20,7 +23,10 @@ class DetailPanel(QWidget):
         super().__init__(parent)
         self._current_image_id: str | None = None
         self._api_client = api_client
+        self._image_viewers: list[ImageViewer] = []
+        self._thumb_pixmap: QPixmap | None = None
         self._build_ui()
+        self.closed.connect(self._close_image_viewers)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -85,7 +91,8 @@ class DetailPanel(QWidget):
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setFixedHeight(200)
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.image_label.setMinimumHeight(50)
         self.image_label.setStyleSheet(f"border: 1px solid {theme.COLOR_DIVIDER}; background: #F5F5F5;")
         self.image_label.setText("画像なし")
         layout.addWidget(self.image_label)
@@ -172,12 +179,14 @@ class DetailPanel(QWidget):
     def _load_image(self, variant: str) -> None:
         """指定バリアントの画像をAPIから取得して image_label に表示する。"""
         if not self._current_image_id or self._api_client is None:
+            self._thumb_pixmap = None
             self.image_label.setPixmap(QPixmap())
             self.image_label.setText("画像なし")
             return
         try:
             image_bytes = self._api_client.get_image_file(self._current_image_id, variant)
         except Exception:
+            self._thumb_pixmap = None
             self.image_label.setPixmap(QPixmap())
             self.image_label.setText("画像が見つかりません。")
             return
@@ -185,25 +194,69 @@ class DetailPanel(QWidget):
         pixmap = QPixmap()
         pixmap.loadFromData(image_bytes)
         if pixmap.isNull():
+            self._thumb_pixmap = None
             self.image_label.setPixmap(QPixmap())
             self.image_label.setText("画像が見つかりません。")
             return
 
         self.image_label.setText("")
-        self.image_label.setPixmap(
-            pixmap.scaled(
-                self.image_label.width(),
-                self.image_label.height(),
-                Qt.AspectRatioMode.KeepAspectRatio,
+        self._thumb_pixmap = pixmap
+        self._apply_thumb_pixmap()
+
+    def _apply_thumb_pixmap(self) -> None:
+        """保存済みサムネイルを現在のラベル幅に合わせて再描画する。"""
+        if self._thumb_pixmap is None or self._thumb_pixmap.isNull():
+            return
+        available_width = self.image_label.width()
+        if available_width > 0:
+            scaled = self._thumb_pixmap.scaledToWidth(
+                available_width,
                 Qt.TransformationMode.SmoothTransformation,
             )
-        )
+            self.image_label.setFixedHeight(scaled.height())
+            self.image_label.setPixmap(scaled)
+        else:
+            self.image_label.setPixmap(self._thumb_pixmap)
+
+    def resizeEvent(self, event) -> None:
+        """パネルサイズ変更時にサムネイルを再スケールする。"""
+        super().resizeEvent(event)
+        self._apply_thumb_pixmap()
 
     def _on_show_original(self) -> None:
-        """原本画像を API から取得して表示する。"""
+        """原本画像を新しい別ウィンドウで表示する。"""
         if self._current_image_id is None or self._api_client is None:
             return
-        self._load_image("original")
+        try:
+            image_bytes = self._api_client.get_image_file(self._current_image_id, "original")
+        except Exception as exc:
+            QMessageBox.warning(self, "画像取得エラー", f"画像の取得に失敗しました。\n{exc}")
+            return
+
+        viewer = ImageViewer(image_id=self._current_image_id)
+        viewer.load_image(image_bytes)
+        viewer.viewer_closed.connect(self._on_viewer_closed)
+        self._image_viewers.append(viewer)
+        viewer.show()
+        viewer.raise_()
+        viewer.activateWindow()
+
+    def _on_viewer_closed(self, viewer: ImageViewer) -> None:
+        """ビューアが閉じられたときにリストから除去する。"""
+        try:
+            self._image_viewers.remove(viewer)
+        except ValueError:
+            pass
+
+    def _close_image_viewers(self) -> None:
+        """すべての ImageViewer ウィンドウを閉じる。"""
+        for viewer in list(self._image_viewers):
+            viewer.close()
+        self._image_viewers.clear()
+
+    def close_image_viewer(self) -> None:
+        """外部から ImageViewer ウィンドウを閉じる（main_window から呼び出す用）。"""
+        self._close_image_viewers()
 
     def _on_move_to_trash(self) -> None:
         """ゴミ箱へ移動し、一覧の更新を要求する。"""
