@@ -23,6 +23,11 @@ _DUMMY_ROWS = [
 _STORE_CANDIDATES = ["コンビニA", "スーパーB", "レストランC", "カフェD", "百貨店E"]
 _PAYMENT_CANDIDATES = ["現金", "クレジット", "電子マネー", "QRコード"]
 
+# _DUMMY_ROWS のカラムインデックス
+_COL_RECEIPT_ID = 0
+_COL_UPLOAD_DATE = 1
+_COL_STATUS = 6
+
 
 class TabFinalEdit(QWidget):
     def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
@@ -147,7 +152,7 @@ class TabFinalEdit(QWidget):
     def _populate_tiles(self) -> None:
         """タイルビューをダミーデータで更新する。"""
         tile_data = [
-            {"image_id": row[0], "created_at": row[1], "status": row[6]}
+            {"image_id": row[_COL_RECEIPT_ID], "created_at": row[_COL_UPLOAD_DATE], "status": row[_COL_STATUS]}
             for row in _DUMMY_ROWS
         ]
         settings = load_settings()

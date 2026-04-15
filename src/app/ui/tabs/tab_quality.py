@@ -20,6 +20,11 @@ _DUMMY_ROWS = [
     ("IMG-003", "—", "FINAL_UPDATED", "MEDIUM", "なし", "—"),
 ]
 
+# _DUMMY_ROWS のカラムインデックス
+_COL_IMAGE_ID = 0
+_COL_UPLOAD_DATE = 1
+_COL_STATUS = 2
+
 
 class TabQuality(QWidget):
     detail_requested = Signal(dict)
@@ -136,7 +141,7 @@ class TabQuality(QWidget):
     def _populate_tiles(self) -> None:
         """タイルビューをダミーデータで更新する。"""
         tile_data = [
-            {"image_id": row[0], "created_at": row[1], "status": row[2]}
+            {"image_id": row[_COL_IMAGE_ID], "created_at": row[_COL_UPLOAD_DATE], "status": row[_COL_STATUS]}
             for row in _DUMMY_ROWS
         ]
         settings = load_settings()
