@@ -107,6 +107,13 @@ class MainWindow(QMainWindow):
         # 設定保存 → 画面全体リフレッシュ
         self._tab_settings.settings_saved.connect(self._on_settings_saved)
 
+        # 表示モード同期（一方のタブで切り替えると他のタブにも反映）
+        _view_mode_tabs = [
+            self._tab_list, self._tab_final_edit, self._tab_quality, self._tab_dups,
+        ]
+        for tab in _view_mode_tabs:
+            tab.view_mode_changed.connect(self._on_view_mode_changed)
+
     # ------------------------------------------------------------------
     # スロット
     # ------------------------------------------------------------------
@@ -140,3 +147,8 @@ class MainWindow(QMainWindow):
         total = 1000
         detail = total * detail_pct // 100
         self._splitter.setSizes([total - detail, detail])
+
+    def _on_view_mode_changed(self, tile_mode: bool) -> None:
+        """いずれかのタブで表示モードが切り替えられたとき、他のタブにも伝播する。"""
+        for tab in (self._tab_list, self._tab_final_edit, self._tab_quality, self._tab_dups):
+            tab.set_tile_mode(tile_mode)

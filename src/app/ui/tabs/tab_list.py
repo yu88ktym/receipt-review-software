@@ -28,6 +28,7 @@ class TabList(QWidget):
     """
 
     detail_requested = Signal(dict)
+    view_mode_changed = Signal(bool)  # True = タイル表示, False = テキスト表示
 
     def __init__(self, service=None, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -111,8 +112,15 @@ class TabList(QWidget):
     # ------------------------------------------------------------------
 
     def _toggle_view(self) -> None:
-        self._tile_mode = not self._tile_mode
-        if self._tile_mode:
+        self.set_tile_mode(not self._tile_mode)
+        self.view_mode_changed.emit(self._tile_mode)
+
+    def set_tile_mode(self, tile_mode: bool) -> None:
+        """タイル表示モードを直接指定する（シグナル発火なし）。タブ間同期に使用。"""
+        if self._tile_mode == tile_mode:
+            return
+        self._tile_mode = tile_mode
+        if tile_mode:
             self._stacked.setCurrentIndex(1)
             self.view_toggle_btn.setText("テキスト表示")
             self._populate_tiles(self._current_page_items())
