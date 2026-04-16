@@ -76,8 +76,8 @@ class MockApiClient:
             "store_name": None,
             "payment_method": None,
             "status": "INGESTED",
-            "quality_level": "UNSET",
-            "consistency_status": "UNSET",
+            "quality_level": "UNKNOWN",
+            "consistency_status": "NO_APPROACH",
             "is_duplicate": False,
             "parent_image_id": None,
             "etag": None,
@@ -131,7 +131,7 @@ class MockApiClient:
         is_text_legible: bool,
     ) -> ImageMeta:
         img = self._find(image_id)
-        img["quality_level"] = "HIGH" if is_receipt and is_text_legible else "LOW"
+        img["quality_level"] = "NO_PROBLEM" if is_receipt and is_text_legible else "LOW"
         return copy.deepcopy(img)
 
     # ------------------------------------------------------------------
@@ -167,7 +167,7 @@ _DUMMY_IMAGES: list[ImageMeta] = [
         "image_id": "R-0001",
         "created_at": "2024-01-15",
         "status": "FINAL_UPDATED",
-        "quality_level": "HIGH",
+        "quality_level": "NO_PROBLEM",
         "integrity_status": "OK",
         "dedup_hit": False,
         "duplicate_of": None,
@@ -185,8 +185,8 @@ _DUMMY_IMAGES: list[ImageMeta] = [
         "image_id": "R-0002",
         "created_at": "2024-01-16",
         "status": "OCR_DONE",
-        "quality_level": "MEDIUM",
-        "integrity_status": "WARN",
+        "quality_level": "OCR_LOW",
+        "integrity_status": "NO_APPROACH",
         "dedup_hit": False,
         "duplicate_of": None,
         "original_image_url": "gs://bucket/R-0002/original.jpg",
@@ -204,7 +204,7 @@ _DUMMY_IMAGES: list[ImageMeta] = [
         "created_at": "2024-01-17",
         "status": "INGESTED",
         "quality_level": "LOW",
-        "integrity_status": "UNSET",
+        "integrity_status": "NO_APPROACH",
         "dedup_hit": False,
         "duplicate_of": None,
         "original_image_url": "gs://bucket/R-0003/original.jpg",
@@ -220,9 +220,9 @@ _DUMMY_IMAGES: list[ImageMeta] = [
     {
         "image_id": "R-0004",
         "created_at": "2024-01-18",
-        "status": "INGESTED",
-        "quality_level": "UNSET",
-        "integrity_status": "UNSET",
+        "status": "OCR_FAILED",
+        "quality_level": "UNKNOWN",
+        "integrity_status": "NO_APPROACH",
         "dedup_hit": True,
         "duplicate_of": "R-0003",
         "original_image_url": "gs://bucket/R-0004/original.jpg",
@@ -239,7 +239,7 @@ _DUMMY_IMAGES: list[ImageMeta] = [
         "image_id": "R-0005",
         "created_at": "2024-01-19",
         "status": "DROPPED",
-        "quality_level": "HIGH",
+        "quality_level": "NO_PROBLEM",
         "integrity_status": "OK",
         "dedup_hit": False,
         "duplicate_of": None,
@@ -250,6 +250,24 @@ _DUMMY_IMAGES: list[ImageMeta] = [
             "total_amount": 12000,
             "store_name": "百貨店E",
             "payment_method": "クレジット",
+        },
+        "ocr_receipt_info": None,
+    },
+    {
+        "image_id": "R-0006",
+        "created_at": "2024-01-20",
+        "status": "FINAL_UPDATED_CHILD",
+        "quality_level": "NO_PROBLEM",
+        "integrity_status": "IGNORED",
+        "dedup_hit": False,
+        "duplicate_of": None,
+        "original_image_url": "gs://bucket/R-0006/original.jpg",
+        "thumb_image_url": "gs://bucket/R-0006/thumb.jpg",
+        "final_receipt": {
+            "purchased_at": "2024-01-19",
+            "total_amount": 5500,
+            "store_name": "薬局F",
+            "payment_method": "電子マネー",
         },
         "ocr_receipt_info": None,
     },
@@ -314,8 +332,8 @@ class MockApiClient:
             "image_id": new_id,
             "created_at": "",
             "status": "INGESTED",
-            "quality_level": "UNSET",
-            "integrity_status": "UNSET",
+            "quality_level": "UNKNOWN",
+            "integrity_status": "NO_APPROACH",
             "dedup_hit": False,
             "duplicate_of": None,
             "ocr_receipt_info": None,
@@ -364,7 +382,7 @@ class MockApiClient:
         self, image_id: str, is_receipt: bool, is_text_legible: bool
     ) -> ImageMeta:
         img = self._find(image_id)
-        img["quality_level"] = "HIGH" if is_receipt and is_text_legible else "LOW"
+        img["quality_level"] = "NO_PROBLEM" if is_receipt and is_text_legible else "LOW"
         return copy.deepcopy(img)
 
     # ------------------------------------------------------------------

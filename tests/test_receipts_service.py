@@ -20,14 +20,14 @@ def service(mock_client: MockApiClient) -> ReceiptsService:
 
 def test_fetch_list_returns_all(service: ReceiptsService) -> None:
     items = service.fetch_list()
-    assert len(items) == 5
+    assert len(items) == 6
 
 
 def test_fetch_list_caches_result(service: ReceiptsService, mock_client: MockApiClient) -> None:
     service.fetch_list()
     # 2回目は ETag が一致するためモックが空リストを返し、キャッシュが再利用される
     items = service.fetch_list()
-    assert len(items) == 5
+    assert len(items) == 6
 
 
 # -----------------------------------------------------------------------
@@ -108,7 +108,7 @@ def test_fetch_list_force_refresh(service: ReceiptsService, mock_client: MockApi
     # 強制リフレッシュ時は ETag をリセットして再取得する
     service.invalidate_cache()
     items = service.fetch_list(force_refresh=True)
-    assert len(items) == 5
+    assert len(items) == 6
 
 
 # -----------------------------------------------------------------------
@@ -144,4 +144,4 @@ def test_invalidate_cache_forces_reload(service: ReceiptsService) -> None:
     service.invalidate_cache()
     # キャッシュクリア後は再取得する
     items = service.fetch_list()
-    assert len(items) == 5
+    assert len(items) == 6

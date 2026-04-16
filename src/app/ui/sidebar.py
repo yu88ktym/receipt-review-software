@@ -45,13 +45,13 @@ class Sidebar(QWidget):
         root.addWidget(QLabel("ステータス"))
         self.status_combo = QComboBox()
         self.status_combo.addItems(
-            ["すべて", "INGESTED", "OCR_DONE", "FINAL_UPDATED", "DROPPED", "NOT_RECEIPT_SUSPECT"]
+            ["すべて", "INGESTED", "OCR_DONE", "OCR_FAILED", "FINAL_UPDATED", "FINAL_UPDATED_CHILD", "DROPPED"]
         )
         root.addWidget(self.status_combo)
 
         root.addWidget(QLabel("品質レベル"))
         self.quality_combo = QComboBox()
-        self.quality_combo.addItems(["すべて", "HIGH", "MEDIUM", "LOW", "UNSET"])
+        self.quality_combo.addItems(["すべて", "UNKNOWN", "NO_PROBLEM", "OCR_LOW", "LOW"])
         root.addWidget(self.quality_combo)
 
         self.exclude_dups_chk = QCheckBox("重複除外")

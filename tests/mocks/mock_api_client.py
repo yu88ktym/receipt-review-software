@@ -72,8 +72,8 @@ class MockApiClient:
             "image_id": new_id,
             "created_at": "",
             "status": "INGESTED",
-            "quality_level": "UNSET",
-            "integrity_status": "UNSET",
+            "quality_level": "UNKNOWN",
+            "integrity_status": "NO_APPROACH",
             "dedup_hit": False,
             "duplicate_of": None,
             "ocr_receipt_info": None,
@@ -128,7 +128,7 @@ class MockApiClient:
         is_text_legible: bool,
     ) -> ImageMeta:
         img = self._find(image_id)
-        img["quality_level"] = "HIGH" if is_receipt and is_text_legible else "LOW"
+        img["quality_level"] = "NO_PROBLEM" if is_receipt and is_text_legible else "LOW"
         return copy.deepcopy(img)
 
     # ------------------------------------------------------------------
