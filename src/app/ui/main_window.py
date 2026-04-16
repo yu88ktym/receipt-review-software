@@ -57,9 +57,9 @@ class MainWindow(QMainWindow):
         # 中央タブ
         self.tabs = QTabWidget()
         self._tab_list = TabList(service=self._service, api_client=self._api_client)
-        self._tab_final_edit = TabFinalEdit(api_client=self._api_client)
+        self._tab_final_edit = TabFinalEdit(service=self._service, api_client=self._api_client)
         self._tab_quality = TabQuality(api_client=self._api_client)
-        self._tab_dups = TabDups(api_client=self._api_client)
+        self._tab_dups = TabDups(service=self._service, api_client=self._api_client)
         self._tab_autocomplete = TabAutocomplete()
         self._tab_export_csv = TabExportCsv()
         self._tab_upload = TabUpload(api_client=self._api_client)
@@ -91,6 +91,8 @@ class MainWindow(QMainWindow):
         # 詳細パネルの表示要求
         self._tab_list.detail_requested.connect(self._show_detail)
         self._tab_quality.detail_requested.connect(self._show_detail)
+        self._tab_final_edit.detail_requested.connect(self._show_detail)
+        self._tab_dups.detail_requested.connect(self._show_detail)
 
         # サイドバー: 更新ボタン → 一覧リフレッシュ
         self.sidebar.refresh_btn.clicked.connect(self._tab_list.refresh)
@@ -100,6 +102,10 @@ class MainWindow(QMainWindow):
 
         # 詳細パネル: ゴミ箱操作完了 → 一覧リフレッシュ
         self.detail_panel.list_refresh_needed.connect(self._tab_list.refresh)
+
+        # 確定値編集・Dups: 操作完了 → 一覧リフレッシュ
+        self._tab_final_edit.list_refresh_needed.connect(self._tab_list.refresh)
+        self._tab_dups.list_refresh_needed.connect(self._tab_list.refresh)
 
         # アップロード完了 → 一覧リフレッシュ
         self._tab_upload.upload_completed.connect(self._tab_list.refresh)

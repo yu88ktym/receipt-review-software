@@ -187,7 +187,7 @@ def test_unset_duplicate(api_client: ApiClient, requests_mock) -> None:
 
 def test_reverse_parent(api_client: ApiClient, requests_mock) -> None:
     requests_mock.post(
-        _ROUTES.reverse_parent("R-0001"),
+        _ROUTES.reverse_parent(),
         json={"old_parent_id": "R-0001", "new_parent_id": "R-0002"},
     )
     result = api_client.reverse_parent("R-0001", "R-0002")

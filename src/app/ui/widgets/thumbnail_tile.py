@@ -62,10 +62,13 @@ class ReceiptTileWidget(QFrame):
     """単一レシートのサムネイルタイル。
 
     クリック時に clicked シグナルに data dict を渡す。
+    ダブルクリック時は left_double_clicked / right_double_clicked シグナルを発火する。
     api_client が None の場合は画像なし表示のみ。
     """
 
     clicked = Signal(dict)
+    left_double_clicked = Signal(dict)
+    right_double_clicked = Signal(dict)
 
     def __init__(
         self,
@@ -176,3 +179,10 @@ class ReceiptTileWidget(QFrame):
         super().mousePressEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._data)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        super().mouseDoubleClickEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.left_double_clicked.emit(self._data)
+        elif event.button() == Qt.MouseButton.RightButton:
+            self.right_double_clicked.emit(self._data)
