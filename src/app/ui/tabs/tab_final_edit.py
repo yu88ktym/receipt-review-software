@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLabel, QLineEdit, QDateEdit, QComboBox, QHeaderView,
-    QFrame, QFormLayout, QGroupBox,
+    QFrame, QFormLayout, QGroupBox, QStackedWidget,
 )
-from PySide6.QtCore import Qt, QDate
+from PySide6.QtCore import Qt, QDate, Signal
 from app.config import theme
 from app.config.status_colors import apply_row_colors
+from app.config.settings_io import load_settings
+from app.ui.widgets.tile_view import TileView
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "操作"]
 
@@ -21,10 +23,19 @@ _DUMMY_ROWS = [
 _STORE_CANDIDATES = ["コンビニA", "スーパーB", "レストランC", "カフェD", "百貨店E"]
 _PAYMENT_CANDIDATES = ["現金", "クレジット", "電子マネー", "QRコード"]
 
+# _DUMMY_ROWS のカラムインデックス
+_COL_RECEIPT_ID = 0
+_COL_UPLOAD_DATE = 1
+_COL_STATUS = 6
+
 
 class TabFinalEdit(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    view_mode_changed = Signal(bool)  # True = タイル表示, False = テキスト表示
+
+    def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._api_client = api_client
+        self._tile_mode = False
         self._build_ui()
         self._populate()
 
@@ -32,6 +43,18 @@ class TabFinalEdit(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
+
+        # ツールバー（切り替えボタン）
+        toolbar = QHBoxLayout()
+        self.view_toggle_btn = QPushButton("サムネイル表示")
+        self.view_toggle_btn.setProperty("flat", "true")
+        self.view_toggle_btn.clicked.connect(self._toggle_view)
+        toolbar.addWidget(self.view_toggle_btn)
+        toolbar.addStretch()
+        root.addLayout(toolbar)
+
+        # スタック（テキスト / サムネイル）
+        self._stacked = QStackedWidget()
 
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
@@ -45,7 +68,13 @@ class TabFinalEdit(QWidget):
         self.table.setSortingEnabled(True)
         self.table.horizontalHeader().setSortIndicatorShown(True)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
-        root.addWidget(self.table)
+        self._stacked.addWidget(self.table)
+
+        # タイルビュー（インデックス 1）
+        self.tile_view = TileView()
+        self._stacked.addWidget(self.tile_view)
+
+        root.addWidget(self._stacked)
 
         # 入力フォーム
         form_group = QGroupBox("確定値を編集")
@@ -93,6 +122,23 @@ class TabFinalEdit(QWidget):
 
         root.addWidget(form_group)
 
+    def _toggle_view(self) -> None:
+        self.set_tile_mode(not self._tile_mode)
+        self.view_mode_changed.emit(self._tile_mode)
+
+    def set_tile_mode(self, tile_mode: bool) -> None:
+        """タイル表示モードを直接指定する（シグナル発火なし）。タブ間同期に使用。"""
+        if self._tile_mode == tile_mode:
+            return
+        self._tile_mode = tile_mode
+        if tile_mode:
+            self._stacked.setCurrentIndex(1)
+            self.view_toggle_btn.setText("テキスト表示")
+            self._populate_tiles()
+        else:
+            self._stacked.setCurrentIndex(0)
+            self.view_toggle_btn.setText("サムネイル表示")
+
     def _populate(self) -> None:
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
@@ -111,6 +157,17 @@ class TabFinalEdit(QWidget):
 
     def _apply_row_colors(self) -> None:
         apply_row_colors(self.table, _STATUS_COL)
+
+    def _populate_tiles(self) -> None:
+        """タイルビューをダミーデータで更新する。"""
+        tile_data = [
+            {"image_id": row[_COL_RECEIPT_ID], "created_at": row[_COL_UPLOAD_DATE], "status": row[_COL_STATUS]}
+            for row in _DUMMY_ROWS
+        ]
+        settings = load_settings()
+        tile_w = settings.get("thumbnail_tile_width", 160)
+        tile_h = settings.get("thumbnail_tile_height", 200)
+        self.tile_view.set_items(tile_data, self._api_client, tile_w, tile_h)
 
     def _on_selection_changed(self) -> None:
         selected = self.table.selectedItems()

@@ -117,6 +117,20 @@ class TabSettings(QWidget):
         self.thumbnail_chk = QCheckBox("サムネイル表示")
         self.thumbnail_chk.setChecked(True)
         layout.addWidget(self.thumbnail_chk, row, 0, 1, 2)
+        row += 1
+
+        layout.addWidget(QLabel("タイル幅 (px)"), row, 0)
+        self.tile_width_spin = QSpinBox()
+        self.tile_width_spin.setRange(80, 400)
+        self.tile_width_spin.setValue(160)
+        layout.addWidget(self.tile_width_spin, row, 1)
+        row += 1
+
+        layout.addWidget(QLabel("タイル高さ (px)"), row, 0)
+        self.tile_height_spin = QSpinBox()
+        self.tile_height_spin.setRange(100, 500)
+        self.tile_height_spin.setValue(200)
+        layout.addWidget(self.tile_height_spin, row, 1)
 
         return group
 
@@ -239,6 +253,8 @@ class TabSettings(QWidget):
             "amount_format": self.amount_format_edit.text(),
             "accent_color": self._accent_color.name(),
             "thumbnail_enabled": self.thumbnail_chk.isChecked(),
+            "thumbnail_tile_width": self.tile_width_spin.value(),
+            "thumbnail_tile_height": self.tile_height_spin.value(),
             "diff_page_size": self.diff_page_size_spin.value(),
             "auto_interval": self.auto_interval_spin.value(),
             "grid_visible": self.grid_chk.isChecked(),
@@ -274,6 +290,10 @@ class TabSettings(QWidget):
             self._update_accent_btn()
         if "thumbnail_enabled" in data:
             self.thumbnail_chk.setChecked(data["thumbnail_enabled"])
+        if "thumbnail_tile_width" in data:
+            self.tile_width_spin.setValue(data["thumbnail_tile_width"])
+        if "thumbnail_tile_height" in data:
+            self.tile_height_spin.setValue(data["thumbnail_tile_height"])
         if "diff_page_size" in data:
             self.diff_page_size_spin.setValue(data["diff_page_size"])
         if "auto_interval" in data:

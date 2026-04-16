@@ -22,6 +22,8 @@ class ApiClient:
         self._routes = ApiRoutes(base_url)
         self._session = requests.Session()
         self._session.headers.update({"X-API-Key": api_key})
+        # サムネイル等の画像バイナリをセッション中にキャッシュする
+        self._image_cache: dict[tuple[str, str], bytes] = {}
 
     # ------------------------------------------------------------------
     # メタ情報
@@ -74,13 +76,21 @@ class ApiClient:
         return resp.json()
 
     def get_image_file(self, image_id: str, variant: str = "thumb") -> bytes:
-        """画像バイナリを取得する。variant は "original" / "thumb" 等。"""
+        """画像バイナリを取得する。variant は "original" / "thumb" 等。
+
+        同一 (image_id, variant) の結果はインメモリキャッシュから返す。
+        """
+        key = (image_id, variant)
+        if key in self._image_cache:
+            return self._image_cache[key]
         resp = self._session.get(
             self._routes.image_file(image_id),
             params={"variant": variant},
         )
         resp.raise_for_status()
-        return resp.content
+        data = resp.content
+        self._image_cache[key] = data
+        return data
 
     # ------------------------------------------------------------------
     # 登録・更新

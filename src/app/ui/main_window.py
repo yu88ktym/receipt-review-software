@@ -56,10 +56,10 @@ class MainWindow(QMainWindow):
 
         # 中央タブ
         self.tabs = QTabWidget()
-        self._tab_list = TabList(service=self._service)
-        self._tab_final_edit = TabFinalEdit()
-        self._tab_quality = TabQuality()
-        self._tab_dups = TabDups()
+        self._tab_list = TabList(service=self._service, api_client=self._api_client)
+        self._tab_final_edit = TabFinalEdit(api_client=self._api_client)
+        self._tab_quality = TabQuality(api_client=self._api_client)
+        self._tab_dups = TabDups(api_client=self._api_client)
         self._tab_autocomplete = TabAutocomplete()
         self._tab_export_csv = TabExportCsv()
         self._tab_upload = TabUpload(api_client=self._api_client)
@@ -107,6 +107,13 @@ class MainWindow(QMainWindow):
         # 設定保存 → 画面全体リフレッシュ
         self._tab_settings.settings_saved.connect(self._on_settings_saved)
 
+        # 表示モード同期（一方のタブで切り替えると他のタブにも反映）
+        _view_mode_tabs = [
+            self._tab_list, self._tab_final_edit, self._tab_quality, self._tab_dups,
+        ]
+        for tab in _view_mode_tabs:
+            tab.view_mode_changed.connect(self._on_view_mode_changed)
+
     # ------------------------------------------------------------------
     # スロット
     # ------------------------------------------------------------------
@@ -140,3 +147,8 @@ class MainWindow(QMainWindow):
         total = 1000
         detail = total * detail_pct // 100
         self._splitter.setSizes([total - detail, detail])
+
+    def _on_view_mode_changed(self, tile_mode: bool) -> None:
+        """いずれかのタブで表示モードが切り替えられたとき、他のタブにも伝播する。"""
+        for tab in (self._tab_list, self._tab_final_edit, self._tab_quality, self._tab_dups):
+            tab.set_tile_mode(tile_mode)
