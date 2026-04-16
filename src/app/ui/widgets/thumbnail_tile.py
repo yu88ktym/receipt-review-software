@@ -2,13 +2,60 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QRunnable, QObject, QThreadPool
 from PySide6.QtGui import QPixmap
 
 from app.config.status_colors import get_row_color
 
 _DEFAULT_TILE_W = 160
 _DEFAULT_TILE_H = 200
+
+
+# ---------------------------------------------------------------------------
+# 非同期画像ローダー（QRunnable）
+# ---------------------------------------------------------------------------
+
+class _ImageLoaderSignals(QObject):
+    """QRunnable が UI スレッドへ結果を通知するためのシグナルホルダー。"""
+
+    done = Signal(QPixmap)
+
+
+class _ImageLoader(QRunnable):
+    """バックグラウンドスレッドで画像を取得・デコード・スケーリングするワーカー。"""
+
+    def __init__(
+        self,
+        api_client,
+        image_id: str,
+        w: int,
+        h: int,
+    ) -> None:
+        super().__init__()
+        self._api_client = api_client
+        self._image_id = image_id
+        self._w = w
+        self._h = h
+        self.signals = _ImageLoaderSignals()
+
+    def run(self) -> None:
+        try:
+            image_bytes = self._api_client.get_image_file(self._image_id, "thumb")
+        except Exception:
+            return
+        if not image_bytes:
+            return
+        pixmap = QPixmap()
+        pixmap.loadFromData(image_bytes)
+        if pixmap.isNull():
+            return
+        scaled = pixmap.scaled(
+            self._w,
+            self._h,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.signals.done.emit(scaled)
 
 
 class ReceiptTileWidget(QFrame):
@@ -98,7 +145,7 @@ class ReceiptTileWidget(QFrame):
         )
 
     # ------------------------------------------------------------------
-    # 画像読み込み
+    # 画像読み込み（非同期）
     # ------------------------------------------------------------------
 
     def _load_image(self) -> None:
@@ -111,26 +158,15 @@ class ReceiptTileWidget(QFrame):
         )
         if not image_id or image_id == "—":
             return
-        try:
-            image_bytes = self._api_client.get_image_file(image_id, "thumb")
-        except Exception:
-            return
-        if not image_bytes:
-            return
-        pixmap = QPixmap()
-        pixmap.loadFromData(image_bytes)
-        if pixmap.isNull():
-            return
         w = self._tile_w - 8
         h = max(self._tile_h - 56, 20)
-        scaled = pixmap.scaled(
-            w,
-            h,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
+        loader = _ImageLoader(self._api_client, image_id, w, h)
+        loader.signals.done.connect(self._on_image_loaded)
+        QThreadPool.globalInstance().start(loader)
+
+    def _on_image_loaded(self, pixmap: QPixmap) -> None:
         self.image_lbl.setText("")
-        self.image_lbl.setPixmap(scaled)
+        self.image_lbl.setPixmap(pixmap)
 
     # ------------------------------------------------------------------
     # マウスイベント
