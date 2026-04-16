@@ -4,20 +4,23 @@ from enum import Enum
 class ImageStatus(str, Enum):
     INGESTED = "INGESTED"
     OCR_DONE = "OCR_DONE"
+    OCR_FAILED = "OCR_FAILED"
     FINAL_UPDATED = "FINAL_UPDATED"
+    FINAL_UPDATED_CHILD = "FINAL_UPDATED_CHILD"
     DROPPED = "DROPPED"
-    NOT_RECEIPT_SUSPECT = "NOT_RECEIPT_SUSPECT"
 
 
 class QualityLevel(str, Enum):
-    HIGH = "HIGH"
-    MEDIUM = "MEDIUM"
+    UNKNOWN = "UNKNOWN"
+    NO_PROBLEM = "NO_PROBLEM"
+    OCR_LOW = "OCR_LOW"
     LOW = "LOW"
-    UNSET = "UNSET"
 
 
 class IntegrityStatus(str, Enum):
     OK = "OK"
-    WARN = "WARN"
-    ERROR = "ERROR"
-    UNSET = "UNSET"
+    NO_APPROACH = "NO_APPROACH"
+    IGNORED = "IGNORED"
+    SUSPECTED_MISSING = "SUSPECTED_MISSING"
+    MISSING = "MISSING"
+    PURGED = "PURGED"

@@ -15,9 +15,9 @@ _HEADERS = ["画像ID", "サムネイル", "ステータス", "品質", "重複"
 _STATUS_COL = 2
 
 _DUMMY_ROWS = [
-    ("IMG-001", "—", "REVIEWED", "HIGH", "なし", "—"),
-    ("IMG-002", "—", "PENDING", "LOW", "あり", "—"),
-    ("IMG-003", "—", "FINAL_UPDATED", "MEDIUM", "なし", "—"),
+    ("IMG-001", "—", "INGESTED", "NO_PROBLEM", "なし", "—"),
+    ("IMG-002", "—", "OCR_DONE", "LOW", "あり", "—"),
+    ("IMG-003", "—", "FINAL_UPDATED", "OCR_LOW", "なし", "—"),
 ]
 
 # _DUMMY_ROWS のカラムインデックス
@@ -52,7 +52,7 @@ class TabQuality(QWidget):
 
         filter_row.addWidget(QLabel("品質レベルフィルター"))
         self.quality_filter = QComboBox()
-        self.quality_filter.addItems(["すべて", "HIGH", "MEDIUM", "LOW", "UNSET"])
+        self.quality_filter.addItems(["すべて", "UNKNOWN", "NO_PROBLEM", "OCR_LOW", "LOW"])
         filter_row.addWidget(self.quality_filter)
         filter_row.addStretch()
         root.addLayout(filter_row)
