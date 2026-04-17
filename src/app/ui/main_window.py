@@ -103,9 +103,11 @@ class MainWindow(QMainWindow):
         # 詳細パネル: ゴミ箱操作完了 → 一覧リフレッシュ
         self.detail_panel.list_refresh_needed.connect(self._tab_list.refresh)
 
-        # 確定値編集・Dups: 操作完了 → 一覧リフレッシュ
+        # 確定値編集・Dups: 操作完了 → 一覧リフレッシュ + 詳細パネル再取得
         self._tab_final_edit.list_refresh_needed.connect(self._tab_list.refresh)
+        self._tab_final_edit.list_refresh_needed.connect(self.detail_panel.reload)
         self._tab_dups.list_refresh_needed.connect(self._tab_list.refresh)
+        self._tab_dups.list_refresh_needed.connect(self.detail_panel.reload)
 
         # アップロード完了 → 一覧リフレッシュ
         self._tab_upload.upload_completed.connect(self._tab_list.refresh)

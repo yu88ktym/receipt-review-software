@@ -97,8 +97,16 @@ class ReceiptTileWidget(QFrame):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(2)
 
-        # 画像エリア（テキストラベル分を除いた高さ）
-        img_h = max(tile_h - 56, 20)
+        # 親子ロールバッジ（dup_role が設定されている場合のみ表示）
+        dup_role = self._data.get("dup_role")
+        if dup_role == "parent":
+            layout.addWidget(_make_role_badge("👑 親", "#FF8F00"))
+        elif dup_role == "child":
+            layout.addWidget(_make_role_badge("🔗 子", "#1565C0"))
+
+        # 画像エリア（ロールバッジ分を考慮した高さ）
+        badge_h = 16 if dup_role else 0
+        img_h = max(tile_h - 56 - badge_h, 20)
         self.image_lbl = QLabel()
         self.image_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_lbl.setFixedHeight(img_h)
@@ -186,3 +194,16 @@ class ReceiptTileWidget(QFrame):
             self.left_double_clicked.emit(self._data)
         elif event.button() == Qt.MouseButton.RightButton:
             self.right_double_clicked.emit(self._data)
+
+
+def _make_role_badge(text: str, bg_color: str) -> QLabel:
+    """親子ロールバッジ用のラベルを生成する。"""
+    lbl = QLabel(text)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setStyleSheet(
+        f"font-size: 7pt; font-weight: bold;"
+        f" background-color: {bg_color}; color: #FFFFFF;"
+        f" border-radius: 2px; padding: 0px 4px;"
+    )
+    lbl.setFixedHeight(14)
+    return lbl

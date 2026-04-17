@@ -176,6 +176,16 @@ class DetailPanel(QWidget):
     # ボタンハンドラ
     # ------------------------------------------------------------------
 
+    def reload(self) -> None:
+        """現在表示中の画像データをAPIから再取得して詳細パネルを更新する。"""
+        if self._current_image_id is None or self._api_client is None or not self.isVisible():
+            return
+        try:
+            data = self._api_client.get_image(self._current_image_id)
+        except Exception:
+            return
+        self.load(data)
+
     def _load_image(self, variant: str) -> None:
         """指定バリアントの画像をAPIから取得して image_label に表示する。"""
         if not self._current_image_id or self._api_client is None:

@@ -8,13 +8,15 @@ from app.config import theme
 from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
-from app.ui.ui_utils import image_meta_to_row
+from app.ui.ui_utils import image_meta_to_row, build_dup_maps
 from app.ui.widgets.tile_view import TileView
 
-_HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "操作"]
+_HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "親子", "操作"]
 
 # ステータス値が格納される列インデックス
 _STATUS_COL = 6
+_DUP_COL = 7
+_ACTION_COL = 8
 
 _STORE_CANDIDATES = ["コンビニA", "スーパーB", "レストランC", "カフェD", "百貨店E"]
 _PAYMENT_CANDIDATES = ["現金", "クレジット", "電子マネー", "QRコード"]
@@ -32,6 +34,8 @@ class TabFinalEdit(QWidget):
         self._tile_mode = False
         self._all_items: list[ImageMeta] = []
         self._current_item: ImageMeta | None = None
+        self._child_to_parent: dict[str, str] = {}
+        self._parent_to_children: dict[str, list[str]] = {}
         self._build_ui()
         self.load_data()
 
@@ -55,8 +59,10 @@ class TabFinalEdit(QWidget):
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(len(_HEADERS) - 1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(len(_HEADERS) - 1, 80)
+        self.table.horizontalHeader().setSectionResizeMode(_DUP_COL, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(_ACTION_COL, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(_DUP_COL, 90)
+        self.table.setColumnWidth(_ACTION_COL, 80)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -173,6 +179,7 @@ class TabFinalEdit(QWidget):
     # ------------------------------------------------------------------
 
     def _populate(self) -> None:
+        self._child_to_parent, self._parent_to_children = build_dup_maps(self._all_items)
         self._populate_table()
         if self._tile_mode:
             self._populate_tiles()
@@ -188,9 +195,12 @@ class TabFinalEdit(QWidget):
                 cell = QTableWidgetItem(val)
                 cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, col, cell)
+            dup_cell = QTableWidgetItem(_dup_role_label(item, self._child_to_parent, self._parent_to_children))
+            dup_cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, _DUP_COL, dup_cell)
             detail_btn = QPushButton("詳細")
             detail_btn.clicked.connect(lambda checked, d=item: self.detail_requested.emit(d))
-            self.table.setCellWidget(row, len(_HEADERS) - 1, detail_btn)
+            self.table.setCellWidget(row, _ACTION_COL, detail_btn)
         apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
 
@@ -201,6 +211,7 @@ class TabFinalEdit(QWidget):
                 "image_id": item.get("image_id", "—"),
                 "created_at": item.get("created_at", "—"),
                 "status": item.get("status", ""),
+                "dup_role": _dup_role_key(item, self._child_to_parent, self._parent_to_children),
             }
             for item in self._all_items
         ]
@@ -346,3 +357,36 @@ class TabFinalEdit(QWidget):
         self.msg_label.setText(text)
         color = "#D32F2F" if error else "#388E3C"
         self.msg_label.setStyleSheet(f"color: {color}; font-size: 9pt;")
+
+
+# ---------------------------------------------------------------------------
+# 親子ロール表示ヘルパー
+# ---------------------------------------------------------------------------
+
+def _dup_role_key(
+    item: ImageMeta,
+    child_to_parent: dict[str, str],
+    parent_to_children: dict[str, list[str]],
+) -> str | None:
+    """タイルに付与する dup_role キー（"parent" / "child" / None）を返す。"""
+    iid = str(item.get("image_id") or "")
+    if iid in parent_to_children:
+        return "parent"
+    if iid in child_to_parent:
+        return "child"
+    return None
+
+
+def _dup_role_label(
+    item: ImageMeta,
+    child_to_parent: dict[str, str],
+    parent_to_children: dict[str, list[str]],
+) -> str:
+    """テーブルの「親子」セルに表示するラベル文字列を返す。"""
+    iid = str(item.get("image_id") or "")
+    if iid in parent_to_children:
+        n = len(parent_to_children[iid])
+        return f"👑 親（子{n}枚）"
+    if iid in child_to_parent:
+        return f"🔗 子"
+    return "—"

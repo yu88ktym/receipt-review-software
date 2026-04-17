@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.services.receipts_service import ReceiptsService
-from app.ui.ui_utils import resolve_trash_button_mode, image_meta_to_row
+from app.ui.ui_utils import resolve_trash_button_mode, image_meta_to_row, build_dup_maps
 from app.config.settings_io import load_settings, save_settings
 from app.api.routes import ApiRoutes
 from tests.mocks.mock_api_client import MockApiClient
@@ -303,24 +303,10 @@ def test_revise_called_for_final_updated(mock_client: MockApiClient) -> None:
 # Dups タブ: 親子マッピング構築ロジック
 # -----------------------------------------------------------------------
 
-def _build_dup_maps(items: list) -> tuple[dict, dict]:
-    """親→子リスト / 子→親 マッピングを構築する（TabDupsのロジック相当）。"""
-    parent_children: dict[str, list[str]] = {}
-    child_parent: dict[str, str] = {}
-    for item in items:
-        dup_of = item.get("duplicate_of")
-        if dup_of:
-            child_id = str(item["image_id"])
-            parent_id = str(dup_of)
-            child_parent[child_id] = parent_id
-            parent_children.setdefault(parent_id, []).append(child_id)
-    return parent_children, child_parent
-
-
 def test_dup_maps_child_of_r0004(service: ReceiptsService) -> None:
     """R-0004 は R-0003 の子として認識される。"""
     items = service.fetch_list()
-    parent_children, child_parent = _build_dup_maps(items)
+    child_parent, parent_children = build_dup_maps(items)
     assert child_parent.get("R-0004") == "R-0003"
     assert "R-0004" in parent_children.get("R-0003", [])
 
@@ -328,7 +314,7 @@ def test_dup_maps_child_of_r0004(service: ReceiptsService) -> None:
 def test_dup_maps_no_child_for_standalone(service: ReceiptsService) -> None:
     """duplicate_of が None の画像は子マッピングに含まれない。"""
     items = service.fetch_list()
-    _, child_parent = _build_dup_maps(items)
+    child_parent, _ = build_dup_maps(items)
     for iid in ("R-0001", "R-0002", "R-0005", "R-0006"):
         assert iid not in child_parent, f"{iid} should not be a child"
 
@@ -356,3 +342,19 @@ def test_reverse_parent_returns_correct_ids(mock_client: MockApiClient) -> None:
     result = mock_client.reverse_parent("R-0003", "R-0004")
     assert result["old_parent_id"] == "R-0003"
     assert result["new_parent_id"] == "R-0004"
+
+
+def test_build_dup_maps_empty_list() -> None:
+    """空リストを渡した場合は両マップとも空。"""
+    c2p, p2c = build_dup_maps([])
+    assert c2p == {}
+    assert p2c == {}
+
+
+def test_build_dup_maps_standalone_not_in_either_map(service: ReceiptsService) -> None:
+    """親子関係のない画像はどちらのマップにも含まれない。"""
+    items = service.fetch_list()
+    child_to_parent, parent_to_children = build_dup_maps(items)
+    for iid in ("R-0001", "R-0002", "R-0005", "R-0006"):
+        assert iid not in child_to_parent
+        assert iid not in parent_to_children

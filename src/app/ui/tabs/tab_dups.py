@@ -5,11 +5,14 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
+from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
 from app.ui.widgets.tile_view import DupsTileView
 
-_HEADERS = ["レシートID", "重複元レシートID", "詳細", "重複解除"]
+_HEADERS = ["レシートID", "アップロード日", "ステータス", "親子関係", "詳細", "解除"]
+_STATUS_COL = 2
+_DUP_COL = 3
 
 
 class TabDups(QWidget):
@@ -52,10 +55,10 @@ class TabDups(QWidget):
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(2, 70)
-        self.table.setColumnWidth(3, 70)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(4, 70)
+        self.table.setColumnWidth(5, 70)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -220,40 +223,55 @@ class TabDups(QWidget):
         self.table.setRowCount(0)
         item_map = {str(i["image_id"]): i for i in self._all_items}
 
-        for child_id, parent_id in self._child_parent.items():
+        for item in self._all_items:
+            image_id = str(item.get("image_id") or "")
             row = self.table.rowCount()
             self.table.insertRow(row)
 
-            self.table.setItem(row, 0, _centered_item(child_id))
-            self.table.setItem(row, 1, _centered_item(parent_id))
+            self.table.setItem(row, 0, _centered_item(image_id))
+            self.table.setItem(row, 1, _centered_item(str(item.get("created_at") or "—")))
+            self.table.setItem(row, 2, _centered_item(str(item.get("status") or "—")))
+            self.table.setItem(row, 3, _centered_item(_dup_relation_label(image_id, self._parent_children, self._child_parent)))
 
             detail_btn = QPushButton("詳細")
-            child_item = item_map.get(child_id, {"image_id": child_id})
             detail_btn.clicked.connect(
-                lambda checked, d=child_item: self.detail_requested.emit(dict(d))
+                lambda checked, d=item: self.detail_requested.emit(dict(d))
             )
-            self.table.setCellWidget(row, 2, detail_btn)
+            self.table.setCellWidget(row, 4, detail_btn)
 
-            release_btn = QPushButton("解除")
-            release_btn.setProperty("flat", "true")
-            release_btn.clicked.connect(
-                lambda checked, cid=child_id, pid=parent_id: self._unset_child(cid, pid)
-            )
-            self.table.setCellWidget(row, 3, release_btn)
+            # 解除ボタンは親子関係がある場合のみ設定
+            if image_id in self._child_parent:
+                parent_id = self._child_parent[image_id]
+                release_btn = QPushButton("解除")
+                release_btn.setProperty("flat", "true")
+                release_btn.clicked.connect(
+                    lambda checked, cid=image_id, pid=parent_id: self._unset_child(cid, pid)
+                )
+                self.table.setCellWidget(row, 5, release_btn)
 
+        apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
 
     def _populate_tiles(self) -> None:
-        """DupsTileView に親子グループを渡す。"""
+        """DupsTileView に全画像をグループとして渡す。"""
         item_map = {str(i["image_id"]): i for i in self._all_items}
+        already_in_group: set[str] = set(self._child_parent.keys()) | set(self._parent_children.keys())
+
         groups = []
+        # 親子グループ（接続線あり）
         for parent_id, child_ids in self._parent_children.items():
-            parent_item = item_map.get(parent_id, {"image_id": parent_id, "created_at": "—", "status": ""})
+            parent_item = {**item_map.get(parent_id, {"image_id": parent_id, "created_at": "—", "status": ""}), "dup_role": "parent"}
             children = [
-                item_map.get(cid, {"image_id": cid, "created_at": "—", "status": ""})
+                {**item_map.get(cid, {"image_id": cid, "created_at": "—", "status": ""}), "dup_role": "child"}
                 for cid in child_ids
             ]
             groups.append({"parent": parent_item, "children": children})
+
+        # スタンドアロン画像（親子関係なし）
+        for item in self._all_items:
+            iid = str(item.get("image_id") or "")
+            if iid not in already_in_group:
+                groups.append({"parent": item, "children": []})
 
         settings = load_settings()
         tile_w = settings.get("thumbnail_tile_width", 160)
@@ -395,6 +413,20 @@ def _centered_item(text: str) -> QTableWidgetItem:
     item = QTableWidgetItem(text)
     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
     return item
+
+
+def _dup_relation_label(
+    image_id: str,
+    parent_to_children: dict[str, list[str]],
+    child_to_parent: dict[str, str],
+) -> str:
+    """テーブルの「親子関係」セルに表示するラベル文字列を返す。"""
+    if image_id in parent_to_children:
+        n = len(parent_to_children[image_id])
+        return f"👑 親（子{n}枚）"
+    if image_id in child_to_parent:
+        return f"🔗 子"
+    return "—"
 
 
 def _divider() -> QFrame:
