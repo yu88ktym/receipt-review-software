@@ -129,7 +129,7 @@ class ApiClient:
         self, image_id: str, parent_id: str
     ) -> SetDuplicateResponse:
         resp = self._session.post(
-            self._routes.duplicate(image_id), json={"parent_image_id": parent_id}
+            self._routes.duplicate(image_id), json={"parent_id": parent_id}
         )
         resp.raise_for_status()
         return resp.json()
@@ -139,7 +139,7 @@ class ApiClient:
     ) -> UnsetDuplicateResponse:
         resp = self._session.delete(
             self._routes.duplicate(image_id),
-            json={"parent_image_id": parent_id},
+            json={"parent_id": parent_id},
         )
         resp.raise_for_status()
         return resp.json()
@@ -148,8 +148,8 @@ class ApiClient:
         self, old_parent_id: str, new_parent_id: str
     ) -> ReverseParentResponse:
         resp = self._session.post(
-            self._routes.reverse_parent(old_parent_id),
-            json={"new_parent_id": new_parent_id},
+            self._routes.reverse_parent(),
+            json={"old_parent_id": old_parent_id, "new_parent_id": new_parent_id},
         )
         resp.raise_for_status()
         return resp.json()

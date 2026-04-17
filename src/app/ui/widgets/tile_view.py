@@ -116,10 +116,17 @@ class DupsTileView(QScrollArea):
     親なし（standalone）のグループは children が空リスト。
     """
 
+    tile_clicked = Signal(dict)
+    tile_left_double_clicked = Signal(dict)
+    tile_right_double_clicked = Signal(dict)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWidgetResizable(True)
         self._container = _DupsTileContainer()
+        self._container.tile_clicked.connect(self.tile_clicked.emit)
+        self._container.tile_left_double_clicked.connect(self.tile_left_double_clicked.emit)
+        self._container.tile_right_double_clicked.connect(self.tile_right_double_clicked.emit)
         self.setWidget(self._container)
 
     def set_groups(
@@ -145,6 +152,10 @@ class _DupsTileContainer(QWidget):
       col 1 – 接続線描画エリア（幅 _CONNECTOR_W）
       col 2 – 子タイル（1 行 1 タイル）
     """
+
+    tile_clicked = Signal(dict)
+    tile_left_double_clicked = Signal(dict)
+    tile_right_double_clicked = Signal(dict)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -179,11 +190,17 @@ class _DupsTileContainer(QWidget):
             row_span = max(1, len(children_data))
 
             parent_tile = ReceiptTileWidget(parent_data, api_client, tile_w, tile_h)
+            parent_tile.clicked.connect(self.tile_clicked.emit)
+            parent_tile.left_double_clicked.connect(self.tile_left_double_clicked.emit)
+            parent_tile.right_double_clicked.connect(self.tile_right_double_clicked.emit)
             self._grid.addWidget(parent_tile, grid_row, 0, row_span, 1)
 
             child_tiles: list[QWidget] = []
             for i, child_data in enumerate(children_data):
                 child_tile = ReceiptTileWidget(child_data, api_client, tile_w, tile_h)
+                child_tile.clicked.connect(self.tile_clicked.emit)
+                child_tile.left_double_clicked.connect(self.tile_left_double_clicked.emit)
+                child_tile.right_double_clicked.connect(self.tile_right_double_clicked.emit)
                 self._grid.addWidget(child_tile, grid_row + i, 2, 1, 1)
                 child_tiles.append(child_tile)
 

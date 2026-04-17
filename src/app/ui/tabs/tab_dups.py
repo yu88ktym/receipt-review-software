@@ -1,30 +1,37 @@
+import requests
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLabel, QLineEdit, QHeaderView, QGroupBox, QFormLayout,
-    QFrame, QStackedWidget,
+    QFrame, QStackedWidget, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
+from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
+from app.models.types import ImageMeta
 from app.ui.widgets.tile_view import DupsTileView
 
-_HEADERS = ["レシートID", "重複元レシートID", "詳細", "重複解除"]
-
-_DUMMY_DUPS = [
-    ("R-0002", "R-0001"),
-    ("R-0004", "R-0001"),
-]
+_HEADERS = ["レシートID", "アップロード日", "ステータス", "親子関係", "詳細", "解除"]
+_STATUS_COL = 2
+_DUP_COL = 3
 
 
 class TabDups(QWidget):
+    detail_requested = Signal(dict)
+    list_refresh_needed = Signal()
     view_mode_changed = Signal(bool)  # True = タイル表示, False = テキスト表示
 
-    def __init__(self, api_client=None, parent: QWidget | None = None) -> None:
+    def __init__(self, service=None, api_client=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._service = service
         self._api_client = api_client
         self._tile_mode = False
+        self._all_items: list[ImageMeta] = []
+        # 親→子リスト / 子→親 マッピング（ボタン操作判定用）
+        self._parent_children: dict[str, list[str]] = {}
+        self._child_parent: dict[str, str] = {}
         self._build_ui()
-        self._populate()
+        self.load_data()
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -49,10 +56,10 @@ class TabDups(QWidget):
         self.table = QTableWidget(0, len(_HEADERS))
         self.table.setHorizontalHeaderLabels(_HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(2, 70)
-        self.table.setColumnWidth(3, 70)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(4, 70)
+        self.table.setColumnWidth(5, 70)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -62,47 +69,106 @@ class TabDups(QWidget):
         self._stacked.addWidget(self.table)
 
         self.dup_tile_view = DupsTileView()
+        self.dup_tile_view.tile_clicked.connect(self._on_tile_clicked)
+        self.dup_tile_view.tile_left_double_clicked.connect(self._on_tile_left_double_clicked)
+        self.dup_tile_view.tile_right_double_clicked.connect(self._on_tile_right_double_clicked)
         self._stacked.addWidget(self.dup_tile_view)
 
         root.addWidget(self._stacked)
 
         root.addWidget(_divider())
 
+        # 操作フォームを横並びに配置
+        forms_row = QHBoxLayout()
+        forms_row.setSpacing(theme.MARGIN)
+
         # 重複設定フォーム
         set_group = QGroupBox("重複設定")
         set_form = QFormLayout(set_group)
         set_form.setSpacing(theme.MARGIN)
 
-        self.dup_target_edit = QLineEdit()
-        self.dup_target_edit.setPlaceholderText("対象画像ID")
-        set_form.addRow("対象画像ID", self.dup_target_edit)
-
         self.dup_parent_edit = QLineEdit()
-        self.dup_parent_edit.setPlaceholderText("親画像ID")
-        set_form.addRow("親画像ID", self.dup_parent_edit)
+        self.dup_parent_edit.setPlaceholderText("例: R-0001")
+        set_form.addRow("親画像ID（左Wクリック）", self.dup_parent_edit)
+
+        self.dup_target_edit = QLineEdit()
+        self.dup_target_edit.setPlaceholderText("例: R-0002")
+        set_form.addRow("子画像ID（右Wクリック）", self.dup_target_edit)
 
         set_btn = QPushButton("重複を設定")
+        set_btn.clicked.connect(self._on_set_duplicate)
         set_form.addRow("", set_btn)
 
-        root.addWidget(set_group)
+        self.set_msg_label = QLabel()
+        self.set_msg_label.setWordWrap(True)
+        set_form.addRow("", self.set_msg_label)
+
+        set_policy_label = QLabel(
+            "【条件】\n"
+            "・子と親のIDが異なること\n"
+            "・子がすでに親を持っていないこと\n"
+            "・親がすでに他の親を持っていないこと"
+        )
+        set_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
+        set_policy_label.setWordWrap(True)
+        set_form.addRow("", set_policy_label)
+
+        forms_row.addWidget(set_group)
 
         # 親子逆転フォーム
         swap_group = QGroupBox("親子逆転")
         swap_form = QFormLayout(swap_group)
         swap_form.setSpacing(theme.MARGIN)
 
-        self.old_parent_edit = QLineEdit()
-        self.old_parent_edit.setPlaceholderText("旧親画像ID")
-        swap_form.addRow("旧親画像ID", self.old_parent_edit)
-
         self.new_parent_edit = QLineEdit()
         self.new_parent_edit.setPlaceholderText("新親画像ID")
-        swap_form.addRow("新親画像ID", self.new_parent_edit)
+        swap_form.addRow("新親画像ID（右Wクリック）", self.new_parent_edit)
+
+        self.old_parent_edit = QLineEdit()
+        self.old_parent_edit.setPlaceholderText("旧親画像ID")
+        swap_form.addRow("旧親画像ID（左Wクリック）", self.old_parent_edit)
 
         swap_btn = QPushButton("親子を逆転")
+        swap_btn.clicked.connect(self._on_reverse_parent)
         swap_form.addRow("", swap_btn)
 
-        root.addWidget(swap_group)
+        self.swap_msg_label = QLabel()
+        self.swap_msg_label.setWordWrap(True)
+        swap_form.addRow("", self.swap_msg_label)
+
+        swap_policy_label = QLabel(
+            "【条件】\n"
+            "・新親と旧親のIDが異なること\n"
+            "・新親は現在の旧親の子であること\n"
+            "・旧親は子を持つ親であること（他の親を持たない）"
+        )
+        swap_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
+        swap_policy_label.setWordWrap(True)
+        swap_form.addRow("", swap_policy_label)
+
+        forms_row.addWidget(swap_group)
+
+        # 親子解除フォーム
+        unset_group = QGroupBox("親子解除")
+        unset_form = QFormLayout(unset_group)
+        unset_form.setSpacing(theme.MARGIN)
+
+        self.unset_id_edit = QLineEdit()
+        self.unset_id_edit.setPlaceholderText("画像ID（親または子）")
+        unset_form.addRow("画像ID", self.unset_id_edit)
+
+        unset_btn = QPushButton("親子を解除")
+        unset_btn.setProperty("danger", "true")
+        unset_btn.clicked.connect(self._on_unset_duplicate)
+        unset_form.addRow("", unset_btn)
+
+        self.unset_msg_label = QLabel()
+        self.unset_msg_label.setWordWrap(True)
+        unset_form.addRow("", self.unset_msg_label)
+
+        forms_row.addWidget(unset_group)
+
+        root.addLayout(forms_row)
 
     # ------------------------------------------------------------------
     # 表示切り替え
@@ -125,47 +191,291 @@ class TabDups(QWidget):
             self._stacked.setCurrentIndex(0)
             self.view_toggle_btn.setText("サムネイル表示")
 
+    # ------------------------------------------------------------------
+    # データ取得
+    # ------------------------------------------------------------------
+
+    def load_data(self) -> None:
+        """全レシートを取得して親子マッピングを構築する。"""
+        if self._service is not None:
+            try:
+                self._all_items = self._service.fetch_list(force_refresh=True)
+            except Exception as exc:
+                self._show_message(self.set_msg_label, f"データ取得エラー: {exc}", error=True)
+                return
+        elif self._api_client is not None:
+            try:
+                self._all_items = self._api_client.list_receipts()
+            except Exception as exc:
+                self._show_message(self.set_msg_label, f"データ取得エラー: {exc}", error=True)
+                return
+        self._build_maps()
+        self._populate()
+
+    def refresh(self) -> None:
+        """一覧を強制再取得する。"""
+        if self._service is not None:
+            self._service.invalidate_cache()
+        self.load_data()
+
+    def _build_maps(self) -> None:
+        """_all_items から親子マッピングを再構築する。"""
+        self._parent_children = {}
+        self._child_parent = {}
+        for item in self._all_items:
+            dup_of = item.get("duplicate_of")
+            if dup_of:
+                child_id = str(item["image_id"])
+                parent_id = str(dup_of)
+                self._child_parent[child_id] = parent_id
+                self._parent_children.setdefault(parent_id, []).append(child_id)
+
+    # ------------------------------------------------------------------
+    # 表示更新
+    # ------------------------------------------------------------------
+
     def _populate(self) -> None:
+        self._populate_table()
+        if self._tile_mode:
+            self._populate_tiles()
+
+    def _populate_table(self) -> None:
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
-        for row_data in _DUMMY_DUPS:
+        item_map = {str(i["image_id"]): i for i in self._all_items}
+
+        for item in self._all_items:
+            image_id = str(item.get("image_id") or "")
             row = self.table.rowCount()
             self.table.insertRow(row)
-            for col, val in enumerate(row_data):
-                item = QTableWidgetItem(val)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, col, item)
+
+            self.table.setItem(row, 0, _centered_item(image_id))
+            self.table.setItem(row, 1, _centered_item(str(item.get("created_at") or "—")))
+            self.table.setItem(row, 2, _centered_item(str(item.get("status") or "—")))
+            self.table.setItem(row, 3, _centered_item(_dup_relation_label(image_id, self._parent_children, self._child_parent)))
 
             detail_btn = QPushButton("詳細")
-            self.table.setCellWidget(row, 2, detail_btn)
+            detail_btn.clicked.connect(
+                lambda checked, d=item: self.detail_requested.emit(dict(d))
+            )
+            self.table.setCellWidget(row, 4, detail_btn)
 
-            release_btn = QPushButton("解除")
-            release_btn.setProperty("flat", "true")
-            self.table.setCellWidget(row, 3, release_btn)
+            # 解除ボタンは親子関係がある場合のみ設定
+            if image_id in self._child_parent:
+                parent_id = self._child_parent[image_id]
+                release_btn = QPushButton("解除")
+                release_btn.setProperty("flat", "true")
+                release_btn.clicked.connect(
+                    lambda checked, cid=image_id, pid=parent_id: self._unset_child(cid, pid)
+                )
+                self.table.setCellWidget(row, 5, release_btn)
+
+        apply_row_colors(self.table, _STATUS_COL)
         self.table.setSortingEnabled(True)
 
     def _populate_tiles(self) -> None:
-        """DupsTileView に親子グループを渡す。"""
-        # 親IDごとに子をグルーピング
-        parent_children: dict[str, list[str]] = {}
-        for child_id, parent_id in _DUMMY_DUPS:
-            parent_children.setdefault(parent_id, []).append(child_id)
+        """DupsTileView に全画像をグループとして渡す。"""
+        item_map = {str(i["image_id"]): i for i in self._all_items}
+        already_in_group: set[str] = set(self._child_parent.keys()) | set(self._parent_children.keys())
 
-        groups = [
-            {
-                "parent": {"image_id": pid, "created_at": "—", "status": ""},
-                "children": [
-                    {"image_id": cid, "created_at": "—", "status": ""}
-                    for cid in cids
-                ],
-            }
-            for pid, cids in parent_children.items()
-        ]
+        groups = []
+        # 親子グループ（接続線あり）
+        for parent_id, child_ids in self._parent_children.items():
+            parent_item = {**item_map.get(parent_id, {"image_id": parent_id, "created_at": "—", "status": ""}), "dup_role": "parent"}
+            children = [
+                {**item_map.get(cid, {"image_id": cid, "created_at": "—", "status": ""}), "dup_role": "child"}
+                for cid in child_ids
+            ]
+            groups.append({"parent": parent_item, "children": children})
+
+        # スタンドアロン画像（親子関係なし）
+        for item in self._all_items:
+            iid = str(item.get("image_id") or "")
+            if iid not in already_in_group:
+                groups.append({"parent": item, "children": []})
 
         settings = load_settings()
         tile_w = settings.get("thumbnail_tile_width", 160)
         tile_h = settings.get("thumbnail_tile_height", 200)
         self.dup_tile_view.set_groups(groups, self._api_client, tile_w, tile_h)
+
+    # ------------------------------------------------------------------
+    # タイルクリックハンドラ
+    # ------------------------------------------------------------------
+
+    def _on_tile_clicked(self, data: dict) -> None:
+        """シングルクリック: 詳細表示。"""
+        self.detail_requested.emit(data)
+
+    def _on_tile_left_double_clicked(self, data: dict) -> None:
+        """左列（親タイル側）ダブルクリック: 親画像IDをフォームに設定。"""
+        image_id = str(data.get("image_id") or "")
+        self.dup_parent_edit.setText(image_id)
+        self.old_parent_edit.setText(image_id)
+        self.unset_id_edit.setText(image_id)
+        self.detail_requested.emit(data)
+
+    def _on_tile_right_double_clicked(self, data: dict) -> None:
+        """右列（子タイル側）ダブルクリック: 子画像IDをフォームに設定。"""
+        image_id = str(data.get("image_id") or "")
+        self.dup_target_edit.setText(image_id)
+        self.new_parent_edit.setText(image_id)
+        self.unset_id_edit.setText(image_id)
+        self.detail_requested.emit(data)
+
+    # ------------------------------------------------------------------
+    # ボタン操作
+    # ------------------------------------------------------------------
+
+    def _on_set_duplicate(self) -> None:
+        """重複を設定ボタン押下。"""
+        child_id = self.dup_target_edit.text().strip()
+        parent_id = self.dup_parent_edit.text().strip()
+        if not child_id or not parent_id:
+            self._show_message(self.set_msg_label, "子画像IDと親画像IDを入力してください。", error=True)
+            return
+        if self._api_client is None:
+            return
+        try:
+            self._api_client.set_duplicate(child_id, parent_id)
+        except requests.HTTPError as exc:
+            self._show_api_error(self.set_msg_label, "設定エラー", exc)
+            return
+        except Exception as exc:
+            self._show_message(self.set_msg_label, f"設定エラー: {exc}", error=True)
+            return
+        self._show_message(self.set_msg_label, "重複を設定しました。", error=False)
+        self.list_refresh_needed.emit()
+        self.refresh()
+
+    def _on_reverse_parent(self) -> None:
+        """親子を逆転ボタン押下。"""
+        old_parent = self.old_parent_edit.text().strip()
+        new_parent = self.new_parent_edit.text().strip()
+        if not old_parent or not new_parent:
+            self._show_message(self.swap_msg_label, "旧親画像IDと新親画像IDを入力してください。", error=True)
+            return
+        if self._api_client is None:
+            return
+        try:
+            self._api_client.reverse_parent(old_parent, new_parent)
+        except requests.HTTPError as exc:
+            self._show_api_error(self.swap_msg_label, "逆転エラー", exc)
+            return
+        except Exception as exc:
+            self._show_message(self.swap_msg_label, f"逆転エラー: {exc}", error=True)
+            return
+        self._show_message(self.swap_msg_label, "親子を逆転しました。", error=False)
+        self.list_refresh_needed.emit()
+        self.refresh()
+
+    def _on_unset_duplicate(self) -> None:
+        """親子を解除ボタン押下。"""
+        image_id = self.unset_id_edit.text().strip()
+        if not image_id:
+            self._show_message(self.unset_msg_label, "画像IDを入力してください。", error=True)
+            return
+        if self._api_client is None:
+            return
+
+        if image_id in self._parent_children:
+            # 親として関係を解除
+            children = self._parent_children[image_id]
+            if len(children) > 1:
+                reply = QMessageBox.question(
+                    self,
+                    "確認",
+                    f"複数の関係（{len(children)}件）が削除されます。よろしいですか？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+            try:
+                for child_id in list(children):
+                    self._api_client.unset_duplicate(child_id, image_id)
+            except Exception as exc:
+                self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
+                return
+        elif image_id in self._child_parent:
+            # 子として関係を解除
+            parent_id = self._child_parent[image_id]
+            try:
+                self._api_client.unset_duplicate(image_id, parent_id)
+            except Exception as exc:
+                self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
+                return
+        else:
+            self._show_message(self.unset_msg_label, "指定されたIDは親子関係に存在しません。", error=True)
+            return
+
+        self._show_message(self.unset_msg_label, "親子関係を解除しました。", error=False)
+        self.list_refresh_needed.emit()
+        self.refresh()
+
+    def _unset_child(self, child_id: str, parent_id: str) -> None:
+        """テーブルの解除ボタンから直接 unset_duplicate を呼び出す。"""
+        if self._api_client is None:
+            return
+        try:
+            self._api_client.unset_duplicate(child_id, parent_id)
+        except Exception as exc:
+            self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
+            return
+        self.list_refresh_needed.emit()
+        self.refresh()
+
+    # ------------------------------------------------------------------
+    # ユーティリティ
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _show_message(label: QLabel, text: str, *, error: bool = False) -> None:
+        label.setText(text)
+        color = "#D32F2F" if error else "#388E3C"
+        label.setStyleSheet(f"color: {color}; font-size: 9pt;")
+
+    @staticmethod
+    def _show_api_error(label: QLabel, prefix: str, exc: requests.HTTPError) -> None:
+        """HTTPErrorからAPIエラー詳細を抽出して表示する。"""
+        try:
+            if exc.response is None:
+                raise ValueError("no response")
+            detail = exc.response.json().get("detail", {})
+            if isinstance(detail, dict):
+                code = detail.get("code", "unknown")
+                message = detail.get("message", str(exc))
+                details = detail.get("details", {})
+                error_text = f"{prefix}\nコード: {code}\nメッセージ: {message}"
+                if details:
+                    details_str = ", ".join(f"{k}={repr(v)}" for k, v in details.items())
+                    error_text += f"\n詳細: {details_str}"
+            else:
+                error_text = f"{prefix}: {detail}"
+        except Exception:
+            error_text = f"{prefix}: {exc}"
+        label.setText(error_text)
+        label.setStyleSheet("color: #D32F2F; font-size: 9pt;")
+
+
+def _centered_item(text: str) -> QTableWidgetItem:
+    item = QTableWidgetItem(text)
+    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    return item
+
+
+def _dup_relation_label(
+    image_id: str,
+    parent_to_children: dict[str, list[str]],
+    child_to_parent: dict[str, str],
+) -> str:
+    """テーブルの「親子関係」セルに表示するラベル文字列を返す。"""
+    if image_id in parent_to_children:
+        n = len(parent_to_children[image_id])
+        return f"👑 親（子{n}枚）"
+    if image_id in child_to_parent:
+        return f"🔗 子"
+    return "—"
 
 
 def _divider() -> QFrame:

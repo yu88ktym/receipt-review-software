@@ -28,8 +28,8 @@ class ApiRoutes:
     def duplicate(self, image_id: str) -> str:
         return f"{self._base}/api/images/{image_id}/duplicate"
 
-    def reverse_parent(self, old_parent_id: str) -> str:
-        return f"{self._base}/api/images/{old_parent_id}/reverse-parent"
+    def reverse_parent(self) -> str:
+        return f"{self._base}/api/images/reverse-parent"
 
     def manual_quality(self, image_id: str) -> str:
         return f"{self._base}/api/images/{image_id}/manual-quality"

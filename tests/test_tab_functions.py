@@ -11,8 +11,9 @@ from pathlib import Path
 import pytest
 
 from app.services.receipts_service import ReceiptsService
-from app.ui.ui_utils import resolve_trash_button_mode, image_meta_to_row
+from app.ui.ui_utils import resolve_trash_button_mode, image_meta_to_row, build_dup_maps
 from app.config.settings_io import load_settings, save_settings
+from app.api.routes import ApiRoutes
 from tests.mocks.mock_api_client import MockApiClient
 from tests.mocks.mock_data import DUMMY_IMAGES
 
@@ -221,3 +222,139 @@ def test_filter_non_dropped_all_trash_mode(service: ReceiptsService) -> None:
     non_dropped = [i for i in items if i["status"] != "DROPPED"]
     for item in non_dropped:
         assert resolve_trash_button_mode(item["status"]) == "trash"
+
+
+# -----------------------------------------------------------------------
+# reverse_parent ルート変更: image_id なし
+# -----------------------------------------------------------------------
+
+def test_reverse_parent_route_has_no_image_id() -> None:
+    """reverse_parent エンドポイントは image_id を含まない。"""
+    routes = ApiRoutes("http://localhost:8000")
+    url = routes.reverse_parent()
+    assert url == "http://localhost:8000/api/images/reverse-parent"
+    assert "R-0001" not in url
+
+
+# -----------------------------------------------------------------------
+# 確定値編集タブ: 確定ボタン表示ロジック
+# -----------------------------------------------------------------------
+
+def _confirm_btn_state(status: str | None) -> tuple[str, bool]:
+    """ステータスから（ボタンテキスト, 有効フラグ）を返すピュア関数（UIロジック相当）。"""
+    if status is None:
+        return "確定", False
+    if status == "FINAL_UPDATED":
+        return "遡及修正", True
+    if status in ("FINAL_UPDATED_CHILD", "DROPPED"):
+        return "確定", False
+    return "確定", True
+
+
+def test_confirm_btn_final_updated() -> None:
+    text, enabled = _confirm_btn_state("FINAL_UPDATED")
+    assert text == "遡及修正"
+    assert enabled is True
+
+
+def test_confirm_btn_final_updated_child() -> None:
+    text, enabled = _confirm_btn_state("FINAL_UPDATED_CHILD")
+    assert text == "確定"
+    assert enabled is False
+
+
+def test_confirm_btn_dropped() -> None:
+    text, enabled = _confirm_btn_state("DROPPED")
+    assert text == "確定"
+    assert enabled is False
+
+
+def test_confirm_btn_other_status() -> None:
+    for status in ("INGESTED", "OCR_DONE", "OCR_FAILED"):
+        text, enabled = _confirm_btn_state(status)
+        assert text == "確定", f"status={status!r}"
+        assert enabled is True, f"status={status!r}"
+
+
+def test_confirm_btn_no_selection() -> None:
+    text, enabled = _confirm_btn_state(None)
+    assert enabled is False
+
+
+# -----------------------------------------------------------------------
+# 確定値編集タブ: finalize_receipt / revise_final_receipt の呼び分け
+# -----------------------------------------------------------------------
+
+def test_finalize_called_for_non_final_updated(mock_client: MockApiClient) -> None:
+    """FINAL_UPDATED 以外のステータスで finalize_receipt が呼ばれると FINAL_UPDATED になる。"""
+    body = {"purchased_at": "2024-01-16", "total_amount": 1500, "store_name": "スーパーB", "payment_method": "クレジット"}
+    result = mock_client.finalize_receipt("R-0002", body)
+    assert result["status"] == "FINAL_UPDATED"
+
+
+def test_revise_called_for_final_updated(mock_client: MockApiClient) -> None:
+    """FINAL_UPDATED ステータスで revise_final_receipt が呼ばれても例外が発生しない。"""
+    body = {"purchased_at": "2024-01-14", "total_amount": 9999, "store_name": "テスト", "payment_method": "現金"}
+    result = mock_client.revise_final_receipt("R-0001", body)
+    assert result is not None
+
+
+# -----------------------------------------------------------------------
+# Dups タブ: 親子マッピング構築ロジック
+# -----------------------------------------------------------------------
+
+def test_dup_maps_child_of_r0004(service: ReceiptsService) -> None:
+    """R-0004 は R-0003 の子として認識される。"""
+    items = service.fetch_list()
+    child_parent, parent_children = build_dup_maps(items)
+    assert child_parent.get("R-0004") == "R-0003"
+    assert "R-0004" in parent_children.get("R-0003", [])
+
+
+def test_dup_maps_no_child_for_standalone(service: ReceiptsService) -> None:
+    """duplicate_of が None の画像は子マッピングに含まれない。"""
+    items = service.fetch_list()
+    child_parent, _ = build_dup_maps(items)
+    for iid in ("R-0001", "R-0002", "R-0005", "R-0006"):
+        assert iid not in child_parent, f"{iid} should not be a child"
+
+
+# -----------------------------------------------------------------------
+# Dups タブ: set_duplicate / unset_duplicate
+# -----------------------------------------------------------------------
+
+def test_set_duplicate_creates_relationship(mock_client: MockApiClient) -> None:
+    """set_duplicate 後、戻り値が正しい。"""
+    result = mock_client.set_duplicate("R-0002", "R-0001")
+    assert result["image_id"] == "R-0002"
+    assert result["parent_image_id"] == "R-0001"
+
+
+def test_unset_duplicate_removes_relationship(mock_client: MockApiClient) -> None:
+    """unset_duplicate 後の戻り値が正しい。"""
+    result = mock_client.unset_duplicate("R-0004", "R-0003")
+    assert result["image_id"] == "R-0004"
+    assert result["parent_image_id"] == "R-0003"
+
+
+def test_reverse_parent_returns_correct_ids(mock_client: MockApiClient) -> None:
+    """reverse_parent が正しい old/new parent_id を返す。"""
+    result = mock_client.reverse_parent("R-0003", "R-0004")
+    assert result["old_parent_id"] == "R-0003"
+    assert result["new_parent_id"] == "R-0004"
+
+
+def test_build_dup_maps_empty_list() -> None:
+    """空リストを渡した場合は両マップとも空。"""
+    c2p, p2c = build_dup_maps([])
+    assert c2p == {}
+    assert p2c == {}
+
+
+def test_build_dup_maps_standalone_not_in_either_map(service: ReceiptsService) -> None:
+    """親子関係のない画像はどちらのマップにも含まれない。"""
+    items = service.fetch_list()
+    child_to_parent, parent_to_children = build_dup_maps(items)
+    for iid in ("R-0001", "R-0002", "R-0005", "R-0006"):
+        assert iid not in child_to_parent
+        assert iid not in parent_to_children

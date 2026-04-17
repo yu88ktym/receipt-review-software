@@ -4,6 +4,28 @@ from __future__ import annotations
 from app.models.types import ImageMeta
 
 
+def build_dup_maps(
+    items: list[ImageMeta],
+) -> tuple[dict[str, str], dict[str, list[str]]]:
+    """全アイテムリストから親子マッピングを構築する。
+
+    Returns:
+        (child_to_parent, parent_to_children)
+        child_to_parent:    {child_image_id: parent_image_id}
+        parent_to_children: {parent_image_id: [child_image_id, ...]}
+    """
+    child_to_parent: dict[str, str] = {}
+    parent_to_children: dict[str, list[str]] = {}
+    for item in items:
+        dup_of = item.get("duplicate_of")
+        if dup_of:
+            child_id = str(item["image_id"])
+            parent_id = str(dup_of)
+            child_to_parent[child_id] = parent_id
+            parent_to_children.setdefault(parent_id, []).append(child_id)
+    return child_to_parent, parent_to_children
+
+
 def resolve_trash_button_mode(status: str) -> str:
     """画像ステータスからゴミ箱操作ボタンの表示モードを決定する。
 
