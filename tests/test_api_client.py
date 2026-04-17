@@ -166,16 +166,16 @@ def test_revise_final_receipt(api_client: ApiClient, requests_mock) -> None:
 def test_set_duplicate(api_client: ApiClient, requests_mock) -> None:
     requests_mock.post(
         _ROUTES.duplicate("R-0002"),
-        json={"image_id": "R-0002", "parent_image_id": "R-0001"},
+        json={"image_id": "R-0002", "parent_id": "R-0001"},
     )
     result = api_client.set_duplicate("R-0002", "R-0001")
-    assert result["parent_image_id"] == "R-0001"
+    assert result["parent_id"] == "R-0001"
 
 
 def test_unset_duplicate(api_client: ApiClient, requests_mock) -> None:
     requests_mock.delete(
         _ROUTES.duplicate("R-0002"),
-        json={"image_id": "R-0002", "parent_image_id": "R-0001"},
+        json={"image_id": "R-0002", "parent_id": "R-0001"},
     )
     result = api_client.unset_duplicate("R-0002", "R-0001")
     assert result["image_id"] == "R-0002"

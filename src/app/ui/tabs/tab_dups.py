@@ -1,3 +1,4 @@
+import requests
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLabel, QLineEdit, QHeaderView, QGroupBox, QFormLayout,
@@ -86,13 +87,13 @@ class TabDups(QWidget):
         set_form = QFormLayout(set_group)
         set_form.setSpacing(theme.MARGIN)
 
-        self.dup_target_edit = QLineEdit()
-        self.dup_target_edit.setPlaceholderText("例: R-0001")
-        set_form.addRow("子画像ID", self.dup_target_edit)
-
         self.dup_parent_edit = QLineEdit()
-        self.dup_parent_edit.setPlaceholderText("親画像ID")
-        set_form.addRow("親画像ID", self.dup_parent_edit)
+        self.dup_parent_edit.setPlaceholderText("例: R-0001")
+        set_form.addRow("親画像ID（左Wクリック）", self.dup_parent_edit)
+
+        self.dup_target_edit = QLineEdit()
+        self.dup_target_edit.setPlaceholderText("例: R-0002")
+        set_form.addRow("子画像ID（右Wクリック）", self.dup_target_edit)
 
         set_btn = QPushButton("重複を設定")
         set_btn.clicked.connect(self._on_set_duplicate)
@@ -102,6 +103,16 @@ class TabDups(QWidget):
         self.set_msg_label.setWordWrap(True)
         set_form.addRow("", self.set_msg_label)
 
+        set_policy_label = QLabel(
+            "【条件】\n"
+            "・子と親のIDが異なること\n"
+            "・子がすでに親を持っていないこと\n"
+            "・親がすでに他の親を持っていないこと"
+        )
+        set_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
+        set_policy_label.setWordWrap(True)
+        set_form.addRow("", set_policy_label)
+
         forms_row.addWidget(set_group)
 
         # 親子逆転フォーム
@@ -109,13 +120,13 @@ class TabDups(QWidget):
         swap_form = QFormLayout(swap_group)
         swap_form.setSpacing(theme.MARGIN)
 
-        self.old_parent_edit = QLineEdit()
-        self.old_parent_edit.setPlaceholderText("旧親画像ID")
-        swap_form.addRow("旧親画像ID", self.old_parent_edit)
-
         self.new_parent_edit = QLineEdit()
         self.new_parent_edit.setPlaceholderText("新親画像ID")
-        swap_form.addRow("新親画像ID", self.new_parent_edit)
+        swap_form.addRow("新親画像ID（右Wクリック）", self.new_parent_edit)
+
+        self.old_parent_edit = QLineEdit()
+        self.old_parent_edit.setPlaceholderText("旧親画像ID")
+        swap_form.addRow("旧親画像ID（左Wクリック）", self.old_parent_edit)
 
         swap_btn = QPushButton("親子を逆転")
         swap_btn.clicked.connect(self._on_reverse_parent)
@@ -124,6 +135,16 @@ class TabDups(QWidget):
         self.swap_msg_label = QLabel()
         self.swap_msg_label.setWordWrap(True)
         swap_form.addRow("", self.swap_msg_label)
+
+        swap_policy_label = QLabel(
+            "【条件】\n"
+            "・新親と旧親のIDが異なること\n"
+            "・新親は現在の旧親の子であること\n"
+            "・旧親は子を持つ親であること（他の親を持たない）"
+        )
+        swap_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
+        swap_policy_label.setWordWrap(True)
+        swap_form.addRow("", swap_policy_label)
 
         forms_row.addWidget(swap_group)
 
@@ -287,18 +308,18 @@ class TabDups(QWidget):
         self.detail_requested.emit(data)
 
     def _on_tile_left_double_clicked(self, data: dict) -> None:
-        """左ダブルクリック: 詳細表示 + 子画像IDをフォームに設定。"""
+        """左列（親タイル側）ダブルクリック: 親画像IDをフォームに設定。"""
         image_id = str(data.get("image_id") or "")
-        self.dup_target_edit.setText(image_id)
-        self.new_parent_edit.setText(image_id)
+        self.dup_parent_edit.setText(image_id)
+        self.old_parent_edit.setText(image_id)
         self.unset_id_edit.setText(image_id)
         self.detail_requested.emit(data)
 
     def _on_tile_right_double_clicked(self, data: dict) -> None:
-        """右ダブルクリック: 詳細表示 + 親画像IDをフォームに設定。"""
+        """右列（子タイル側）ダブルクリック: 子画像IDをフォームに設定。"""
         image_id = str(data.get("image_id") or "")
-        self.dup_parent_edit.setText(image_id)
-        self.old_parent_edit.setText(image_id)
+        self.dup_target_edit.setText(image_id)
+        self.new_parent_edit.setText(image_id)
         self.unset_id_edit.setText(image_id)
         self.detail_requested.emit(data)
 
@@ -317,6 +338,9 @@ class TabDups(QWidget):
             return
         try:
             self._api_client.set_duplicate(child_id, parent_id)
+        except requests.HTTPError as exc:
+            self._show_api_error(self.set_msg_label, "設定エラー", exc)
+            return
         except Exception as exc:
             self._show_message(self.set_msg_label, f"設定エラー: {exc}", error=True)
             return
@@ -335,6 +359,9 @@ class TabDups(QWidget):
             return
         try:
             self._api_client.reverse_parent(old_parent, new_parent)
+        except requests.HTTPError as exc:
+            self._show_api_error(self.swap_msg_label, "逆転エラー", exc)
+            return
         except Exception as exc:
             self._show_message(self.swap_msg_label, f"逆転エラー: {exc}", error=True)
             return
@@ -407,6 +434,28 @@ class TabDups(QWidget):
         label.setText(text)
         color = "#D32F2F" if error else "#388E3C"
         label.setStyleSheet(f"color: {color}; font-size: 9pt;")
+
+    @staticmethod
+    def _show_api_error(label: QLabel, prefix: str, exc: requests.HTTPError) -> None:
+        """HTTPErrorからAPIエラー詳細を抽出して表示する。"""
+        try:
+            if exc.response is None:
+                raise ValueError("no response")
+            detail = exc.response.json().get("detail", {})
+            if isinstance(detail, dict):
+                code = detail.get("code", "unknown")
+                message = detail.get("message", str(exc))
+                details = detail.get("details", {})
+                error_text = f"{prefix}\nコード: {code}\nメッセージ: {message}"
+                if details:
+                    details_str = ", ".join(f"{k}={repr(v)}" for k, v in details.items())
+                    error_text += f"\n詳細: {details_str}"
+            else:
+                error_text = f"{prefix}: {detail}"
+        except Exception:
+            error_text = f"{prefix}: {exc}"
+        label.setText(error_text)
+        label.setStyleSheet("color: #D32F2F; font-size: 9pt;")
 
 
 def _centered_item(text: str) -> QTableWidgetItem:
