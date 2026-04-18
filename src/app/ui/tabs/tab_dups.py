@@ -39,7 +39,7 @@ class TabDups(QWidget):
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
 
-        # ツールバー（切り替えボタン）
+        # ツールバー（切り替えボタン + 更新ボタン）
         toolbar = QHBoxLayout()
         dup_label = QLabel("重複候補一覧")
         dup_label.setProperty("heading", "true")
@@ -49,6 +49,9 @@ class TabDups(QWidget):
         self.view_toggle_btn.setProperty("flat", "true")
         self.view_toggle_btn.clicked.connect(self._toggle_view)
         toolbar.addWidget(self.view_toggle_btn)
+        self.refresh_btn = QPushButton("更新")
+        self.refresh_btn.clicked.connect(self.refresh)
+        toolbar.addWidget(self.refresh_btn)
         root.addLayout(toolbar)
 
         # スタック（テキスト / サムネイル）
