@@ -17,7 +17,7 @@ class ApiRoutes:
         return f"{self._base}/api/images/{image_id}/file"
 
     def ingest(self) -> str:
-        return f"{self._base}/api/images/ingest"
+        return f"{self._base}/api/images"
 
     def dustbox(self, image_id: str) -> str:
         return f"{self._base}/api/images/{image_id}/dustbox"

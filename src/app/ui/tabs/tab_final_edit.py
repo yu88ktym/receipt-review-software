@@ -4,11 +4,12 @@ from PySide6.QtWidgets import (
     QFrame, QFormLayout, QGroupBox, QStackedWidget, QMessageBox,
 )
 from PySide6.QtCore import Qt, QDate, Signal
+import requests
 from app.config import theme
 from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
-from app.ui.ui_utils import image_meta_to_row, build_dup_maps
+from app.ui.ui_utils import image_meta_to_row, build_dup_maps, extract_api_error
 from app.ui.widgets.tile_view import TileView
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス", "親子", "操作"]
@@ -345,6 +346,9 @@ class TabFinalEdit(QWidget):
                 self._api_client.revise_final_receipt(image_id, body)
             else:
                 self._api_client.finalize_receipt(image_id, body)
+        except requests.HTTPError as exc:
+            self._show_api_error(exc)
+            return
         except Exception as exc:
             self._show_message(f"送信エラー: {exc}", error=True)
             return
@@ -357,6 +361,11 @@ class TabFinalEdit(QWidget):
         self.msg_label.setText(text)
         color = "#D32F2F" if error else "#388E3C"
         self.msg_label.setStyleSheet(f"color: {color}; font-size: 9pt;")
+
+    def _show_api_error(self, exc: requests.HTTPError) -> None:
+        """HTTPErrorからAPIエラー詳細を抽出してメッセージラベルに表示する。"""
+        detail = extract_api_error(exc)
+        self._show_message(f"送信エラー\n{detail}", error=True)
 
 
 # ---------------------------------------------------------------------------

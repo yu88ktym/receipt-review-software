@@ -3,12 +3,14 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+import requests
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QFileDialog, QProgressBar, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 from app.config import theme
+from app.ui.ui_utils import extract_api_error
 
 
 class TabUpload(QWidget):
@@ -81,7 +83,7 @@ class TabUpload(QWidget):
         total = len(self._selected_files)
         success_count = 0
         fail_count = 0
-        fail_names: list[str] = []
+        fail_details: list[str] = []
 
         self.send_btn.setEnabled(False)
         self.select_btn.setEnabled(False)
@@ -94,21 +96,27 @@ class TabUpload(QWidget):
             try:
                 image_bytes = Path(file_path).read_bytes()
                 upload_id = uuid.uuid4().hex
-                self._api_client.ingest_image(image_bytes, upload_id)
+                filename = Path(file_path).name
+                self._api_client.ingest_image(image_bytes, upload_id, filename)
                 success_count += 1
-            except Exception:
+            except requests.HTTPError as exc:
                 fail_count += 1
-                fail_names.append(Path(file_path).name)
+                error_detail = extract_api_error(exc)
+                fail_details.append(f"{Path(file_path).name}: {error_detail}")
+            except Exception as exc:
+                fail_count += 1
+                fail_details.append(f"{Path(file_path).name}: {exc}")
 
             self.progress_bar.setValue(i)
 
         self.progress_bar.setVisible(False)
         self.select_btn.setEnabled(True)
 
-        # 結果表示
+        # 結果表示（エラー詳細を含む）
         lines = [f"送信完了: 成功 {success_count} 件、失敗 {fail_count} 件"]
-        if fail_names:
-            lines.append("失敗ファイル: " + "、".join(fail_names))
+        if fail_details:
+            lines.append("失敗詳細:")
+            lines.extend(f"  - {detail}" for detail in fail_details)
         self.result_lbl.setText("\n".join(lines))
 
         # 選択状態をリセット

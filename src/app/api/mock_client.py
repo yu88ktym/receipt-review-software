@@ -326,7 +326,7 @@ class MockApiClient:
     # 登録・更新
     # ------------------------------------------------------------------
 
-    def ingest_image(self, image_bytes: bytes, upload_id: str) -> IngestImageResponse:
+    def ingest_image(self, image_bytes: bytes, upload_id: str, filename: str = "upload.jpg") -> IngestImageResponse:
         new_id = f"R-{uuid.uuid4().hex[:6].upper()}"
         img: ImageMeta = {
             "image_id": new_id,
