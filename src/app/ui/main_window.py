@@ -94,8 +94,10 @@ class MainWindow(QMainWindow):
         self._tab_final_edit.detail_requested.connect(self._show_detail)
         self._tab_dups.detail_requested.connect(self._show_detail)
 
-        # サイドバー: 更新ボタン → 一覧リフレッシュ
+        # サイドバー: 更新ボタン → 全タブリフレッシュ
         self.sidebar.refresh_btn.clicked.connect(self._tab_list.refresh)
+        self.sidebar.refresh_btn.clicked.connect(self._tab_final_edit.refresh)
+        self.sidebar.refresh_btn.clicked.connect(self._tab_dups.refresh)
 
         # サイドバー: フィルタ変更 → 一覧更新
         self.sidebar.filter_changed.connect(self._tab_list.load_data)
@@ -109,8 +111,10 @@ class MainWindow(QMainWindow):
         self._tab_dups.list_refresh_needed.connect(self._tab_list.refresh)
         self._tab_dups.list_refresh_needed.connect(self.detail_panel.reload)
 
-        # アップロード完了 → 一覧リフレッシュ
+        # アップロード完了 → 全タブリフレッシュ
         self._tab_upload.upload_completed.connect(self._tab_list.refresh)
+        self._tab_upload.upload_completed.connect(self._tab_final_edit.refresh)
+        self._tab_upload.upload_completed.connect(self._tab_dups.refresh)
 
         # 設定保存 → 画面全体リフレッシュ
         self._tab_settings.settings_saved.connect(self._on_settings_saved)

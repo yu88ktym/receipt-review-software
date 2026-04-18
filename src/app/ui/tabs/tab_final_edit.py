@@ -45,13 +45,16 @@ class TabFinalEdit(QWidget):
         root.setContentsMargins(theme.PADDING, theme.PADDING, theme.PADDING, theme.PADDING)
         root.setSpacing(theme.MARGIN)
 
-        # ツールバー（切り替えボタン）
+        # ツールバー（切り替えボタン + 更新ボタン）
         toolbar = QHBoxLayout()
         self.view_toggle_btn = QPushButton("サムネイル表示")
         self.view_toggle_btn.setProperty("flat", "true")
         self.view_toggle_btn.clicked.connect(self._toggle_view)
         toolbar.addWidget(self.view_toggle_btn)
         toolbar.addStretch()
+        self.refresh_btn = QPushButton("更新")
+        self.refresh_btn.clicked.connect(self.refresh)
+        toolbar.addWidget(self.refresh_btn)
         root.addLayout(toolbar)
 
         # スタック（テキスト / サムネイル）
