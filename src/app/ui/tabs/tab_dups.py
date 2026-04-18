@@ -9,6 +9,7 @@ from app.config import theme
 from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
+from app.ui.ui_utils import extract_api_error
 from app.ui.widgets.tile_view import DupsTileView
 
 _HEADERS = ["レシートID", "アップロード日", "ステータス", "親子関係", "詳細", "解除"]
@@ -397,6 +398,9 @@ class TabDups(QWidget):
             try:
                 for child_id in list(children):
                     self._api_client.unset_duplicate(child_id, image_id)
+            except requests.HTTPError as exc:
+                self._show_api_error(self.unset_msg_label, "解除エラー", exc)
+                return
             except Exception as exc:
                 self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
                 return
@@ -405,6 +409,9 @@ class TabDups(QWidget):
             parent_id = self._child_parent[image_id]
             try:
                 self._api_client.unset_duplicate(image_id, parent_id)
+            except requests.HTTPError as exc:
+                self._show_api_error(self.unset_msg_label, "解除エラー", exc)
+                return
             except Exception as exc:
                 self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
                 return
@@ -422,6 +429,9 @@ class TabDups(QWidget):
             return
         try:
             self._api_client.unset_duplicate(child_id, parent_id)
+        except requests.HTTPError as exc:
+            self._show_api_error(self.unset_msg_label, "解除エラー", exc)
+            return
         except Exception as exc:
             self._show_message(self.unset_msg_label, f"解除エラー: {exc}", error=True)
             return
@@ -441,22 +451,8 @@ class TabDups(QWidget):
     @staticmethod
     def _show_api_error(label: QLabel, prefix: str, exc: requests.HTTPError) -> None:
         """HTTPErrorからAPIエラー詳細を抽出して表示する。"""
-        try:
-            if exc.response is None:
-                raise ValueError("no response")
-            detail = exc.response.json().get("detail", {})
-            if isinstance(detail, dict):
-                code = detail.get("code", "unknown")
-                message = detail.get("message", str(exc))
-                details = detail.get("details", {})
-                error_text = f"{prefix}\nコード: {code}\nメッセージ: {message}"
-                if details:
-                    details_str = ", ".join(f"{k}={repr(v)}" for k, v in details.items())
-                    error_text += f"\n詳細: {details_str}"
-            else:
-                error_text = f"{prefix}: {detail}"
-        except Exception:
-            error_text = f"{prefix}: {exc}"
+        detail = extract_api_error(exc)
+        error_text = f"{prefix}\n{detail}"
         label.setText(error_text)
         label.setStyleSheet("color: #D32F2F; font-size: 9pt;")
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import requests
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QPushButton, QLabel, QHeaderView, QMessageBox, QStackedWidget,
@@ -9,7 +10,7 @@ from app.config import theme
 from app.config.status_colors import apply_row_colors
 from app.config.settings_io import load_settings
 from app.models.types import ImageMeta
-from app.ui.ui_utils import image_meta_to_row, build_dup_maps
+from app.ui.ui_utils import image_meta_to_row, build_dup_maps, extract_api_error
 from app.ui.widgets.tile_view import TileView
 
 _HEADERS = ["レシートID", "アップロード日", "購入日", "合計金額", "店名", "支払方法", "ステータス/重要", "親子", "操作"]
@@ -153,6 +154,10 @@ class TabList(QWidget):
                 force_refresh=force_refresh,
                 **fetch_params,
             )
+        except requests.HTTPError as exc:
+            detail = extract_api_error(exc)
+            QMessageBox.warning(self, "通信エラー", f"データの取得に失敗しました。\n{detail}")
+            return
         except Exception as exc:
             QMessageBox.warning(self, "通信エラー", f"データの取得に失敗しました。\n{exc}")
             return

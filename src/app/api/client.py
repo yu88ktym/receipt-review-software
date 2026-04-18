@@ -97,12 +97,12 @@ class ApiClient:
     # ------------------------------------------------------------------
 
     def ingest_image(
-        self, image_bytes: bytes, upload_id: str
+        self, image_bytes: bytes, upload_id: str, filename: str = "upload.jpg"
     ) -> IngestImageResponse:
         resp = self._session.post(
             self._routes.ingest(),
-            files={"file": ("upload.jpg", image_bytes, "image/jpeg")},
-            data={"upload_id": upload_id},
+            files={"image": (filename, image_bytes, "image/jpeg")},
+            headers={"X-Upload-Id": upload_id},
         )
         resp.raise_for_status()
         return resp.json()

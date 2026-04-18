@@ -1,6 +1,8 @@
 """UI ロジックのユーティリティ関数。PySide6 に依存しない純粋な Python のみを使用する。"""
 from __future__ import annotations
 
+import requests
+
 from app.models.types import ImageMeta
 
 
@@ -79,3 +81,27 @@ def image_meta_to_row(meta: ImageMeta) -> tuple[str, ...]:
     amount_str = format_amount(total_amount)
 
     return (image_id, created_at, purchase_date, amount_str, store_name, payment_method, status)
+
+
+def extract_api_error(exc: requests.HTTPError) -> str:
+    """HTTPErrorからAPIエラー詳細を抽出して文字列として返す。
+
+    レスポンスのJSONに {"detail": {"code": ..., "message": ...}} 形式が含まれる場合は
+    コードとメッセージを組み合わせた文字列を返す。そうでなければ例外の文字列表現を返す。
+    """
+    try:
+        if exc.response is None:
+            return str(exc)
+        detail = exc.response.json().get("detail", {})
+        if isinstance(detail, dict):
+            code = detail.get("code", "unknown")
+            message = detail.get("message", str(exc))
+            details = detail.get("details", {})
+            error_text = f"[{code}] {message}"
+            if details:
+                details_str = ", ".join(f"{k}={repr(v)}" for k, v in details.items())
+                error_text += f" ({details_str})"
+            return error_text
+        return str(detail)
+    except Exception:
+        return str(exc)
