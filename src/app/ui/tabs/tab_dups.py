@@ -97,11 +97,11 @@ class TabDups(QWidget):
 
         set_btn = QPushButton("重複を設定")
         set_btn.clicked.connect(self._on_set_duplicate)
-        set_form.addRow("", set_btn)
+        set_form.addRow(set_btn)
 
         self.set_msg_label = QLabel()
         self.set_msg_label.setWordWrap(True)
-        set_form.addRow("", self.set_msg_label)
+        set_form.addRow(self.set_msg_label)
 
         set_policy_label = QLabel(
             "【条件】\n"
@@ -111,7 +111,7 @@ class TabDups(QWidget):
         )
         set_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
         set_policy_label.setWordWrap(True)
-        set_form.addRow("", set_policy_label)
+        set_form.addRow(set_policy_label)
 
         forms_row.addWidget(set_group)
 
@@ -130,11 +130,11 @@ class TabDups(QWidget):
 
         swap_btn = QPushButton("親子を逆転")
         swap_btn.clicked.connect(self._on_reverse_parent)
-        swap_form.addRow("", swap_btn)
+        swap_form.addRow(swap_btn)
 
         self.swap_msg_label = QLabel()
         self.swap_msg_label.setWordWrap(True)
-        swap_form.addRow("", self.swap_msg_label)
+        swap_form.addRow(self.swap_msg_label)
 
         swap_policy_label = QLabel(
             "【条件】\n"
@@ -144,7 +144,7 @@ class TabDups(QWidget):
         )
         swap_policy_label.setStyleSheet("color: #666666; font-size: 8pt;")
         swap_policy_label.setWordWrap(True)
-        swap_form.addRow("", swap_policy_label)
+        swap_form.addRow(swap_policy_label)
 
         forms_row.addWidget(swap_group)
 
@@ -160,11 +160,11 @@ class TabDups(QWidget):
         unset_btn = QPushButton("親子を解除")
         unset_btn.setProperty("danger", "true")
         unset_btn.clicked.connect(self._on_unset_duplicate)
-        unset_form.addRow("", unset_btn)
+        unset_form.addRow(unset_btn)
 
         self.unset_msg_label = QLabel()
         self.unset_msg_label.setWordWrap(True)
-        unset_form.addRow("", self.unset_msg_label)
+        unset_form.addRow(self.unset_msg_label)
 
         forms_row.addWidget(unset_group)
 
@@ -366,6 +366,9 @@ class TabDups(QWidget):
             self._show_message(self.swap_msg_label, f"逆転エラー: {exc}", error=True)
             return
         self._show_message(self.swap_msg_label, "親子を逆転しました。", error=False)
+        # 逆転成功後、フィールドの値を入れ替える（再度押下で元に戻せるようにする）
+        self.old_parent_edit.setText(new_parent)
+        self.new_parent_edit.setText(old_parent)
         self.list_refresh_needed.emit()
         self.refresh()
 
